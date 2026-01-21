@@ -382,3 +382,42 @@ export async function searchShadowWallets(query: string) {
 export async function getShadowWalletByName(name: string) {
   return apiCall<{ success: boolean; wallet: ShadowWalletSearchResult }>(`api-wallets-by-name&name=${encodeURIComponent(name)}`);
 }
+
+// ============================================
+// PREMIUM NDD
+// ============================================
+
+export interface PremiumNdd {
+  name: string;
+  pfp: string | null;
+  cost: number;
+}
+
+/**
+ * Get list of premium NDD for sale
+ */
+export async function getPremiumNddList(limit = 20) {
+  return apiCall<{ success: boolean; ndds: PremiumNdd[] }>(`api-ndd-list&limit=${limit}`);
+}
+
+/**
+ * Get a single NDD by name
+ */
+export async function getPremiumNdd(name: string) {
+  return apiCall<{ success: boolean; ndd: PremiumNdd }>(`api-ndd-get&name=${encodeURIComponent(name)}`);
+}
+
+/**
+ * Verify NDD purchase transaction and assign NDD to shadow wallet
+ */
+export async function verifyNddPurchase(data: {
+  signature: string;
+  ndd_name: string;
+  shadow_pubkey: string;
+  expected_amount: number;
+}) {
+  return apiCall<{ success: boolean; message?: string; new_name?: string; error?: string }>('api-ndd-purchase', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AppLayout } from "@/components/app-layout";
 import { getShadowWalletByName, isPremiumWallet } from "@/lib/api";
 import { getShadowProfileStats, type ShadowProfileStats, type TopPostWithRank } from "@/lib/shadow/topPosts";
@@ -112,8 +112,10 @@ function ShadowPostCard({ post, walletName, isOwnPost, isPremium, premiumPfp }: 
 function ShadowProfileContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const name = decodeURIComponent(params.name as string);
-  const { wallets: myWallets } = useShadow();
+  const { wallets: myWallets, refreshWalletNames } = useShadow();
+  const shouldRefresh = searchParams.get("refresh") === "1";
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +127,16 @@ function ShadowProfileContent() {
 
   // Check if this is our own wallet
   const isOwnWallet = walletPubkey ? myWallets.some(w => w.publicKey === walletPubkey) : false;
+
+  // Handle refresh flag from NDD purchase
+  useEffect(() => {
+    if (shouldRefresh) {
+      // Remove the refresh param from URL
+      router.replace(`/shadow/${encodeURIComponent(name)}`);
+      // Refresh wallet names to get updated data
+      refreshWalletNames();
+    }
+  }, [shouldRefresh, name, router, refreshWalletNames]);
 
   // Load wallet info by name
   useEffect(() => {

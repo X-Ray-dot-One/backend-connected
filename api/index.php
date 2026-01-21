@@ -155,6 +155,230 @@ elseif ($action === 'api-wallets-by-name') {
     $shadowWalletController->getByName();
 }
 // ============================================
+// API Routes pour Premium NDD
+// ============================================
+// GET /api/ndd/list - Liste des NDD premium à vendre
+elseif ($action === 'api-ndd-list') {
+    header('Content-Type: application/json');
+
+    require_once __DIR__ . '/app/models/PremiumNdd.php';
+    $nddModel = new PremiumNdd();
+
+    $limit = intval($_GET['limit'] ?? 20);
+    $ndds = $nddModel->getAll($limit);
+
+    echo json_encode([
+        'success' => true,
+        'ndds' => $ndds
+    ]);
+    exit;
+}
+// GET /api/ndd/get - Get a single NDD by name
+elseif ($action === 'api-ndd-get') {
+    header('Content-Type: application/json');
+
+    require_once __DIR__ . '/app/models/PremiumNdd.php';
+    $nddModel = new PremiumNdd();
+
+    $name = $_GET['name'] ?? '';
+    if (empty($name)) {
+        echo json_encode(['success' => false, 'error' => 'Name required']);
+        exit;
+    }
+
+    $ndd = $nddModel->getByName($name);
+    if (!$ndd) {
+        echo json_encode(['success' => false, 'error' => 'NDD not found']);
+        exit;
+    }
+
+    echo json_encode([
+        'success' => true,
+        'ndd' => $ndd
+    ]);
+    exit;
+}
+// POST /api/ndd/purchase - Verify transaction and assign NDD
+elseif ($action === 'api-ndd-purchase') {
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo json_encode(['success' => false, 'error' => 'POST required']);
+        exit;
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+    $signature = $input['signature'] ?? '';
+    $nddName = $input['ndd_name'] ?? '';
+    $shadowPubkey = $input['shadow_pubkey'] ?? '';
+    $expectedAmount = floatval($input['expected_amount'] ?? 0);
+
+    if (empty($signature) || empty($nddName) || empty($shadowPubkey) || $expectedAmount <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+        exit;
+    }
+
+    require_once __DIR__ . '/app/models/PremiumNdd.php';
+    require_once __DIR__ . '/app/models/ShadowWallet.php';
+    require_once __DIR__ . '/config/database.php';
+
+    $nddModel = new PremiumNdd();
+    $shadowModel = new ShadowWallet();
+    $db = Database::getInstance()->getConnection();
+
+    // Check NDD exists and get its price
+    $ndd = $nddModel->getByName($nddName);
+    if (!$ndd) {
+        echo json_encode(['success' => false, 'error' => 'NDD not found']);
+        exit;
+    }
+
+    // Check if signature was already used (prevent replay attacks)
+    // Create table if not exists
+    $db->exec("CREATE TABLE IF NOT EXISTS used_signatures (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        signature VARCHAR(128) NOT NULL UNIQUE,
+        ndd_name VARCHAR(100) NOT NULL,
+        shadow_pubkey VARCHAR(64) NOT NULL,
+        created_at DATETIME NOT NULL,
+        INDEX idx_signature (signature)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $checkSig = $db->prepare("SELECT id FROM used_signatures WHERE signature = :sig");
+    $checkSig->execute([':sig' => $signature]);
+    if ($checkSig->fetch()) {
+        echo json_encode(['success' => false, 'error' => 'Transaction already used']);
+        exit;
+    }
+
+    // Verify price matches
+    if (abs($ndd['cost'] - $expectedAmount) > 0.0001) {
+        echo json_encode(['success' => false, 'error' => 'Price mismatch']);
+        exit;
+    }
+
+    // Verify transaction on Solana via RPC
+    $rpcUrl = 'https://devnet.helius-rpc.com/?api-key=64cda369-a212-4064-8133-e0e6827644b7';
+
+    // Revenue split wallets (45% / 10% / 45%)
+    $wallet1 = '69TwH2GJiBSA8Eo3DunPGsXGWjNFY267zRrpHptYWCuC'; // GRINGO - 45%
+    $wallet2 = 'EbhZhYumUZyHQCPbeaLLt57SS2obHiFdp7TMLjUBBqcD'; // GUARDIAN - 10%
+    $wallet3 = 'HxtzFZhjNCsQb9ZqEyK8xYftqv6j6AM2MAT6uwWG3KYd'; // SACHA - 45%
+
+    $rpcPayload = json_encode([
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'getTransaction',
+        'params' => [$signature, ['encoding' => 'jsonParsed', 'commitment' => 'confirmed']]
+    ]);
+
+    $ch = curl_init($rpcUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $rpcPayload);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    $rpcResult = json_decode($response, true);
+
+    if (!$rpcResult || isset($rpcResult['error']) || !isset($rpcResult['result'])) {
+        echo json_encode(['success' => false, 'error' => 'Transaction not found or RPC error']);
+        exit;
+    }
+
+    $tx = $rpcResult['result'];
+
+    // Verify transaction was successful
+    if ($tx['meta']['err'] !== null) {
+        echo json_encode(['success' => false, 'error' => 'Transaction failed on-chain']);
+        exit;
+    }
+
+    // Find the 3 transfer instructions and verify amounts + recipients
+    $instructions = $tx['transaction']['message']['instructions'] ?? [];
+    $expectedLamports = intval($expectedAmount * 1000000000); // Convert SOL to lamports
+
+    // Expected amounts (45% / 10% / 45%)
+    $expected1 = intval($expectedLamports * 0.45);
+    $expected2 = intval($expectedLamports * 0.10);
+    $expected3 = $expectedLamports - $expected1 - $expected2; // Remainder
+
+    // Track verified transfers
+    $verified1 = false;
+    $verified2 = false;
+    $verified3 = false;
+    $totalReceived = 0;
+
+    foreach ($instructions as $ix) {
+        if (isset($ix['parsed']['type']) && $ix['parsed']['type'] === 'transfer') {
+            $info = $ix['parsed']['info'];
+            $destination = $info['destination'] ?? '';
+            $lamports = intval($info['lamports'] ?? 0);
+            $source = $info['source'] ?? '';
+
+            // Verify source is the shadow wallet
+            if ($source !== $shadowPubkey) {
+                continue;
+            }
+
+            // Check each wallet (with 1% tolerance for rounding)
+            if ($destination === $wallet1 && $lamports >= $expected1 * 0.99) {
+                $verified1 = true;
+                $totalReceived += $lamports;
+            } elseif ($destination === $wallet2 && $lamports >= $expected2 * 0.99) {
+                $verified2 = true;
+                $totalReceived += $lamports;
+            } elseif ($destination === $wallet3 && $lamports >= $expected3 * 0.99) {
+                $verified3 = true;
+                $totalReceived += $lamports;
+            }
+        }
+    }
+
+    // All 3 transfers must be verified and total must be close to expected
+    if (!$verified1 || !$verified2 || !$verified3 || $totalReceived < $expectedLamports * 0.99) {
+        echo json_encode(['success' => false, 'error' => 'Transaction verification failed: missing transfers or wrong amounts']);
+        exit;
+    }
+
+    // All verified! Update shadow wallet name and mark as premium
+    // First check if shadow wallet exists
+    $existingWallet = $shadowModel->getByPubkey($shadowPubkey);
+    if (!$existingWallet) {
+        echo json_encode(['success' => false, 'error' => 'Shadow wallet not found in database: ' . $shadowPubkey]);
+        exit;
+    }
+
+    $updateSuccess = $shadowModel->updateName($shadowPubkey, $nddName);
+    if (!$updateSuccess) {
+        echo json_encode(['success' => false, 'error' => 'Failed to update shadow wallet name']);
+        exit;
+    }
+
+    // Mark wallet as premium
+    $shadowModel->setPremium($shadowPubkey, true);
+
+    // Copy profile picture from NDD to premium wallet
+    if (!empty($ndd['pfp'])) {
+        $shadowModel->setPremiumProfilePicture($shadowPubkey, $ndd['pfp']);
+    }
+
+    // Save signature to prevent replay attacks
+    $saveSig = $db->prepare("INSERT INTO used_signatures (signature, ndd_name, shadow_pubkey, created_at) VALUES (:sig, :ndd, :pubkey, NOW())");
+    $saveSig->execute([':sig' => $signature, ':ndd' => $nddName, ':pubkey' => $shadowPubkey]);
+
+    // Remove NDD from sale
+    $nddModel->delete($nddName);
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'NDD purchased successfully',
+        'new_name' => $nddName
+    ]);
+    exit;
+}
+// ============================================
 // API JSON Routes pour React Frontend
 // ============================================
 

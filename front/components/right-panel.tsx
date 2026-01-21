@@ -6,10 +6,11 @@ import { Search, TrendingUp, Flame, Globe, Loader2, Crown } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useSearchModal } from "./app-layout";
 import { getTop20Posts, TopPost } from "@/lib/shadow/topPosts";
-import { getShadowWalletName, isPremiumWallet } from "@/lib/api";
+import { getShadowWalletName, isPremiumWallet, getPremiumNddList, PremiumNdd } from "@/lib/api";
 import { getImageUrl } from "@/lib/utils";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { EyeOff } from "lucide-react";
+import { NddPurchaseModal } from "./ndd-purchase-modal";
 
 // Mock data - waiting for API endpoints
 const trendingTopics = [
@@ -51,13 +52,6 @@ const suggestedUsers = [
   },
 ];
 
-// NDD Marketplace mock (keeping for now)
-const nddMarketplace = [
-  { domain: "defi.anon", price: "45 SOL" },
-  { domain: "alpha.anon", price: "32 SOL" },
-  { domain: "whale.anon", price: "28 SOL" },
-  { domain: "crypto.anon", price: "120 SOL" },
-];
 
 // Helper to format time ago
 function formatTimeAgo(timestamp: number): string {
@@ -95,6 +89,10 @@ export function RightPanel() {
   const [followingIds, setFollowingIds] = useState<Set<number>>(new Set());
   const [topPosts, setTopPosts] = useState<TopPostWithName[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
+  const [nddList, setNddList] = useState<PremiumNdd[]>([]);
+  const [isLoadingNdd, setIsLoadingNdd] = useState(false);
+  const [selectedNdd, setSelectedNdd] = useState<PremiumNdd | null>(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
   // Fetch top posts when in shadow mode
   useEffect(() => {
@@ -140,6 +138,19 @@ export function RightPanel() {
         })
         .finally(() => {
           setIsLoadingPosts(false);
+        });
+
+      // Fetch NDD list
+      setIsLoadingNdd(true);
+      getPremiumNddList(10)
+        .then((res) => {
+          setNddList(res.ndds || []);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch NDD list:", error);
+        })
+        .finally(() => {
+          setIsLoadingNdd(false);
         });
     }
   }, [isShadowMode]);
@@ -262,27 +273,43 @@ export function RightPanel() {
         </div>
         <div>
           {isShadowMode ? (
-            nddMarketplace.map((item) => (
-              <div
-                key={item.domain}
-                className="flex items-center justify-between px-4 py-3 hover:bg-muted transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={`https://api.dicebear.com/7.x/shapes/svg?seed=${item.domain.split('.')[0]}&backgroundColor=ec4899,a855f7,8b5cf6`}
-                    alt={item.domain}
-                    className="w-10 h-10 rounded-lg"
-                  />
-                  <div>
-                    <p className="font-medium text-pink-500">{item.domain}</p>
-                    <p className="text-xs text-muted-foreground">{item.price}</p>
-                  </div>
-                </div>
-                <button className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors">
-                  buy
-                </button>
+            isLoadingNdd ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
-            ))
+            ) : nddList.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                no premium ndd available
+              </div>
+            ) : (
+              nddList.map((ndd) => (
+                <div
+                  key={ndd.name}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={ndd.pfp ? getImageUrl(ndd.pfp, "") : `https://api.dicebear.com/7.x/shapes/svg?seed=${ndd.name}&backgroundColor=ec4899,a855f7,8b5cf6`}
+                      alt={ndd.name}
+                      className="w-10 h-10 rounded-lg object-cover"
+                    />
+                    <div>
+                      <p className="font-medium text-pink-500">{ndd.name}</p>
+                      <p className="text-xs text-muted-foreground">{ndd.cost} SOL</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedNdd(ndd);
+                      setIsPurchaseModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
+                  >
+                    buy
+                  </button>
+                </div>
+              ))
+            )
           ) : (
             suggestedUsers.map((user) => (
               <div
@@ -337,6 +364,21 @@ export function RightPanel() {
         </div>
         <p className="mt-2">© 2025 X-RAY</p>
       </div>
+
+      {/* NDD Purchase Modal */}
+      {selectedNdd && (
+        <NddPurchaseModal
+          isOpen={isPurchaseModalOpen}
+          onClose={() => {
+            setIsPurchaseModalOpen(false);
+            setSelectedNdd(null);
+          }}
+          ndd={selectedNdd}
+          onSuccess={() => {
+            setNddList(prev => prev.filter(n => n.name !== selectedNdd.name));
+          }}
+        />
+      )}
     </aside>
   );
 }

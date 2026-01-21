@@ -46,6 +46,7 @@ interface ShadowContextType {
   selectWallet: (index: number) => void;
   refreshStats: () => Promise<void>;
   refreshBalances: () => Promise<void>;
+  refreshWalletNames: () => Promise<void>;
   getSelectedKeypair: () => Promise<Keypair | null>;
 }
 
@@ -104,12 +105,13 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const { sig, odI, pk } = JSON.parse(sessionData);
+        const { sig, odI, pk, swi } = JSON.parse(sessionData);
         if (!sig || !odI || !pk) {
           sessionStorage.removeItem(SESSION_KEY);
           setIsRestoring(false);
           return;
         }
+        const savedWalletIndex = typeof swi === 'number' ? swi : 0;
 
         // Restore state
         setSignature(sig);
@@ -167,7 +169,9 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
 
           setWallets(regeneratedWallets);
           if (regeneratedWallets.length > 0) {
-            setSelectedWalletIndex(0);
+            // Restore saved wallet index, or default to 0
+            const indexToSelect = savedWalletIndex < regeneratedWallets.length ? savedWalletIndex : 0;
+            setSelectedWalletIndex(indexToSelect);
           }
         }
 
@@ -324,6 +328,7 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
         sig,
         odI: userId,
         pk: walletPublicKey,
+        swi: 0, // Selected wallet index
       }));
 
       // Select first wallet if available
@@ -470,6 +475,35 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets]);
 
+  const refreshWalletNames = useCallback(async () => {
+    if (wallets.length === 0 || !hashedUserId) return;
+
+    try {
+      const updatedWallets: ShadowWalletWithBalance[] = [];
+      for (const wallet of wallets) {
+        try {
+          const nameResponse = await api.getShadowWalletName(wallet.publicKey);
+          updatedWallets.push({
+            ...wallet,
+            name: nameResponse.name || wallet.name
+          });
+        } catch {
+          // Keep existing name on error
+          updatedWallets.push(wallet);
+        }
+      }
+      setWallets(updatedWallets);
+
+      // Update localStorage
+      const savedKey = `${STORAGE_KEY_PREFIX}${hashedUserId}_wallets`;
+      localStorage.setItem(savedKey, JSON.stringify(
+        updatedWallets.map(w => ({ index: w.index, name: w.name }))
+      ));
+    } catch (error) {
+      console.warn("Failed to refresh wallet names:", error);
+    }
+  }, [wallets, hashedUserId]);
+
   const getSelectedKeypair = useCallback(async (): Promise<Keypair | null> => {
     if (!signature || !hashedUserId || selectedWalletIndex === null) {
       return null;
@@ -496,6 +530,22 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
     window.addEventListener(CLEAR_SHADOW_EVENT, handleClearShadow);
     return () => window.removeEventListener(CLEAR_SHADOW_EVENT, handleClearShadow);
   }, []);
+
+  // Persist selected wallet index to session storage
+  useEffect(() => {
+    if (selectedWalletIndex === null || !isUnlocked) return;
+
+    const sessionData = sessionStorage.getItem(SESSION_KEY);
+    if (sessionData) {
+      try {
+        const parsed = JSON.parse(sessionData);
+        parsed.swi = selectedWalletIndex;
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }, [selectedWalletIndex, isUnlocked]);
 
   // Refresh stats when selected wallet changes (with delay to avoid rate limits)
   useEffect(() => {
@@ -549,6 +599,7 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
         selectWallet,
         refreshStats,
         refreshBalances,
+        refreshWalletNames,
         getSelectedKeypair,
       }}
     >

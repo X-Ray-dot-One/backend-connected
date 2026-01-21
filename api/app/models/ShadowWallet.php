@@ -135,6 +135,19 @@ class ShadowWallet {
     }
 
     /**
+     * Get a shadow wallet by its public key
+     */
+    public function getByPubkey($shadowPubkey) {
+        $stmt = $this->db->prepare("
+            SELECT * FROM shadow_wallets WHERE shadow_pubkey = :shadow_pubkey
+        ");
+        $stmt->bindParam(':shadow_pubkey', $shadowPubkey);
+        $stmt->execute();
+
+        return $stmt->fetch();
+    }
+
+    /**
      * Get a shadow wallet by its name
      * Returns pubkey and created_at
      */
@@ -187,5 +200,20 @@ class ShadowWallet {
         $stmt->execute();
 
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Update the name of a shadow wallet (used for NDD purchase)
+     */
+    public function updateName($shadowPubkey, $newName) {
+        $stmt = $this->db->prepare("
+            UPDATE shadow_wallets
+            SET name = :new_name
+            WHERE shadow_pubkey = :shadow_pubkey
+        ");
+        $stmt->bindParam(':new_name', $newName);
+        $stmt->bindParam(':shadow_pubkey', $shadowPubkey);
+
+        return $stmt->execute();
     }
 }
