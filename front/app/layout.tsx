@@ -4,6 +4,7 @@ import "./globals.css";
 import { ModeProvider } from "@/contexts/mode-context";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ShadowProvider } from "@/contexts/shadow-context";
+import { MessagesProvider } from "@/contexts/messages-context";
 import { ToastProvider } from "@/components/toast";
 
 const geistSans = Geist({
@@ -34,7 +35,9 @@ export default function RootLayout({
         <AuthProvider>
           <ModeProvider>
             <ShadowProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <MessagesProvider>
+                <ToastProvider>{children}</ToastProvider>
+              </MessagesProvider>
             </ShadowProvider>
           </ModeProvider>
         </AuthProvider>

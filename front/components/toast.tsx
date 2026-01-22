@@ -5,12 +5,12 @@ import { Check, X } from "lucide-react";
 
 interface Toast {
   id: number;
-  message: string;
+  message: ReactNode;
   type: "success" | "error" | "info";
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: "success" | "error" | "info") => void;
+  showToast: (message: ReactNode, type?: "success" | "error" | "info") => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -18,14 +18,14 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((message: string, type: "success" | "error" | "info" = "success") => {
+  const showToast = useCallback((message: ReactNode, type: "success" | "error" | "info" = "success") => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
 
-    // Auto remove after 2 seconds
+    // Auto remove after 3 seconds (longer for links)
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 2000);
+    }, 3000);
   }, []);
 
   const removeToast = useCallback((id: number) => {

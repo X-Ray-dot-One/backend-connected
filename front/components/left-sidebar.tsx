@@ -22,8 +22,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { getImageUrl } from "@/lib/utils";
 
 const navItems = [
-  { icon: Bell, label: "notifications", href: "/notifications", comingSoon: false },
-  { icon: Mail, label: "messages", href: "/messages", comingSoon: true },
+  { icon: Bell, label: "notifications", href: "/notifications", comingSoon: false, publicOnly: true },
+  { icon: Mail, label: "messages", href: "/messages", comingSoon: false, publicOnly: false },
 ];
 
 // Wallet types detection
@@ -272,7 +272,13 @@ export function LeftSidebar() {
               </div>
             )}
           </li>
-          {navItems.map((item) => (
+          {navItems
+            .filter((item) => {
+              // Hide publicOnly items in shadow mode
+              if (item.publicOnly && isShadowMode) return false;
+              return true;
+            })
+            .map((item) => (
             <li key={item.label}>
               {item.comingSoon ? (
                 <div className="flex items-center gap-3 px-3 rounded-lg text-muted-foreground">

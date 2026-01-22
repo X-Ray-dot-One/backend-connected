@@ -176,7 +176,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </button>
 
                   {isIdentityOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg py-1">
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-y-auto">
                       {shadowWallets.map((wallet, index) => {
                         const walletPremiumStatus = premiumWallets.get(wallet.publicKey);
                         const isPremium = walletPremiumStatus?.isPremium || false;
