@@ -79,7 +79,7 @@ const authorInfoListeners = new Set<AuthorInfoListener>();
 
 function subscribeToAuthorInfo(listener: AuthorInfoListener) {
   authorInfoListeners.add(listener);
-  return () => authorInfoListeners.delete(listener);
+  return () => { authorInfoListeners.delete(listener); };
 }
 
 function notifyAuthorInfoUpdate(pubkey: string, name: string, isPremium: boolean, pfp: string | null) {
