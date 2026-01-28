@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Toast Container */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2">
         {toasts.map(toast => (
           <div
             key={toast.id}

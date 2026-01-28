@@ -907,12 +907,12 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             exit={{ opacity: 0, y: 100, scale: 0.95 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             style={{ backgroundColor: "var(--card)" }}
-            className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full border border-border rounded-2xl shadow-2xl z-50 flex ${
-              isShadowMode && isTargetLocked ? "max-w-4xl" : "max-w-lg"
+            className={`fixed inset-0 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:rounded-2xl border-0 md:border border-border shadow-2xl z-50 flex flex-col md:flex-row md:max-h-[90vh] ${
+              isShadowMode && isTargetLocked ? "md:max-w-4xl" : "md:max-w-lg"
             }`}
           >
             {/* Main form section */}
-            <div className={`flex-1 ${isShadowMode && isTargetLocked ? "border-r border-border" : ""}`}>
+            <div className={`flex-1 overflow-y-auto ${isShadowMode && isTargetLocked ? "md:border-r border-border" : ""}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <button
@@ -1348,7 +1348,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                     </div>
                   )}
                   <div
-                    className={`relative min-h-[120px] max-h-[200px] ${isShadowMode && !isTargetLocked ? "opacity-30" : "cursor-text"}`}
+                    className={`relative min-h-[120px] md:max-h-[200px] ${isShadowMode && !isTargetLocked ? "opacity-30" : "cursor-text"}`}
                     onClick={() => {
                       if (!isShadowMode || isTargetLocked) {
                         textareaRef.current?.focus();
@@ -1373,7 +1373,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                     />
                     {/* Highlighted text display */}
                     <div
-                      className="w-full min-h-[120px] max-h-[200px] text-lg whitespace-pre-wrap break-words overflow-y-auto pointer-events-none"
+                      className="w-full min-h-[120px] md:max-h-[200px] text-lg whitespace-pre-wrap break-words overflow-y-auto pointer-events-none"
                       style={{ wordBreak: "break-word" }}
                     >
                       {content ? (
@@ -1510,9 +1510,9 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             </div>
             </div>
 
-            {/* Preview panel - only in shadow mode when target is locked */}
+            {/* Preview panel - only in shadow mode when target is locked, hidden on mobile */}
             {isShadowMode && isTargetLocked && (
-              <div className="w-80 p-3 flex-shrink-0">
+              <div className="hidden md:block w-80 p-3 flex-shrink-0">
                 <PostPreview
                   targetUser={targetUser}
                   targetPlatform={targetPlatform}

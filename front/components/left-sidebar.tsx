@@ -86,6 +86,9 @@ const KNOWN_WALLETS = [
 ] as const;
 
 export function LeftSidebar() {
+  const show = "hidden xl:inline";
+  const showBlock = "hidden xl:block";
+  const justify = "justify-center xl:justify-start";
   const { isShadowMode, toggleMode } = useMode();
   const { openPostModal } = usePostModal();
   const { openSearchModal } = useSearchModal();
@@ -185,23 +188,23 @@ export function LeftSidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 border-r border-primary/20 bg-card p-4 flex flex-col transition-colors duration-300">
+    <aside className="fixed left-0 top-0 h-screen hidden md:flex w-16 xl:w-64 p-2 xl:p-4 border-r border-primary/20 bg-card flex-col transition-colors duration-300">
       {/* Logo */}
-      <div className="mb-6 px-3">
-        <div className="flex items-center gap-3">
-          <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+      <div className={`mb-6 px-0 xl:px-3`}>
+        <div className={`flex items-center gap-3 justify-center xl:justify-start`}>
+          <div className={`w-10 xl:w-16 h-10 xl:h-16 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0`}>
             <img
               src={isShadowMode ? "/private-logo.png" : "/public-logo.png"}
               alt="X-RAY"
               className="w-[175%] h-[175%] object-contain"
             />
           </div>
-          <span className="text-2xl font-bold text-foreground">X-RAY</span>
+          <span className={`text-2xl font-bold text-foreground hidden xl:block`}>X-RAY</span>
         </div>
       </div>
 
       {/* Mode Toggle - Switch with Icons */}
-      <div className="mb-6 mx-3 flex flex-col items-center">
+      <div className={`mb-6 mx-0 xl:mx-3 flex flex-col items-center`}>
         <button
           onClick={toggleMode}
           className="flex items-center gap-2 p-1 rounded-full bg-muted/50 transition-colors"
@@ -229,8 +232,8 @@ export function LeftSidebar() {
           </div>
         </button>
 
-        <p className="text-xs text-muted-foreground mt-2 text-center">
-          {isShadowMode ? "// encrypted via Arcium" : "// wallet visible"}
+        <p className={`text-xs text-muted-foreground mt-2 text-center hidden xl:block`}>
+          {isShadowMode ? "// encrypted" : "// wallet visible"}
         </p>
       </div>
 
@@ -240,19 +243,19 @@ export function LeftSidebar() {
           <li>
             <a
               href="/"
-              className="flex items-center gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+              className={`flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors`}
             >
-              <Home className="w-5 h-5" />
-              <span>home</span>
+              <Home className="w-5 h-5 flex-shrink-0" />
+              <span className={show}>home</span>
             </a>
           </li>
           <li>
             <button
               onClick={openSearchModal}
-              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+              className={`w-full flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors`}
             >
-              <Search className="w-5 h-5" />
-              <span>explore</span>
+              <Search className="w-5 h-5 flex-shrink-0" />
+              <span className={show}>explore</span>
             </button>
           </li>
           {/* Profile - disabled when not connected */}
@@ -260,50 +263,51 @@ export function LeftSidebar() {
             {isAuthenticated ? (
               <a
                 href="/profile"
-                className="flex items-center gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                className={`flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors`}
               >
-                <User className="w-5 h-5" />
-                <span>profile</span>
+                <User className="w-5 h-5 flex-shrink-0" />
+                <span className={show}>profile</span>
               </a>
             ) : (
-              <div className="flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground/50 cursor-not-allowed">
-                <User className="w-5 h-5" />
-                <span>profile</span>
+              <div className={`flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-muted-foreground/50 cursor-not-allowed`}>
+                <User className="w-5 h-5 flex-shrink-0" />
+                <span className={show}>profile</span>
               </div>
             )}
           </li>
           {navItems
             .filter((item) => {
-              // Hide publicOnly items in shadow mode
               if (item.publicOnly && isShadowMode) return false;
               return true;
             })
             .map((item) => (
             <li key={item.label}>
               {item.comingSoon ? (
-                <div className="flex items-center gap-3 px-3 rounded-lg text-muted-foreground">
-                  <item.icon className="w-5 h-5" />
-                  <FlipButton
-                    frontText={item.label}
-                    backText="coming soon"
-                    from="top"
-                    className="h-auto py-3 px-0 text-base font-normal"
-                    frontClassName="bg-transparent text-muted-foreground justify-start"
-                    backClassName="bg-transparent text-primary justify-start"
-                  />
+                <div className={`flex items-center ${justify} gap-3 px-3 rounded-lg text-muted-foreground`}>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <div className={showBlock}>
+                    <FlipButton
+                      frontText={item.label}
+                      backText="coming soon"
+                      from="top"
+                      className="h-auto py-3 px-0 text-base font-normal"
+                      frontClassName="bg-transparent text-muted-foreground justify-start"
+                      backClassName="bg-transparent text-primary justify-start"
+                    />
+                  </div>
                 </div>
               ) : isAuthenticated ? (
                 <a
                   href={item.href}
-                  className="flex items-center gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                  className={`flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-foreground hover:bg-primary/10 hover:text-primary transition-colors`}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className={show}>{item.label}</span>
                 </a>
               ) : (
-                <div className="flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground/50 cursor-not-allowed">
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
+                <div className={`flex items-center ${justify} gap-3 px-3 py-3 rounded-lg text-muted-foreground/50 cursor-not-allowed`}>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className={show}>{item.label}</span>
                 </div>
               )}
             </li>
@@ -314,10 +318,10 @@ export function LeftSidebar() {
       {/* How it works */}
       <a
         href="/how-it-works"
-        className="flex items-center gap-3 px-3 py-3 mx-3 mb-4 rounded-lg text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors"
+        className={`flex items-center ${justify} gap-3 px-3 py-3 mx-0 xl:mx-3 mb-4 rounded-lg text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors`}
       >
-        <HelpCircle className="w-5 h-5" />
-        <span>how it works</span>
+        <HelpCircle className="w-5 h-5 flex-shrink-0" />
+        <span className={show}>how it works</span>
       </a>
 
       {/* Post Button - disabled when not connected */}
@@ -330,30 +334,30 @@ export function LeftSidebar() {
             : "bg-muted text-muted-foreground cursor-not-allowed"
         }`}
       >
-        <PenSquare className="w-4 h-4" />
-        <span>{isShadowMode ? "shadow post" : "post"}</span>
+        <PenSquare className="w-4 h-4 flex-shrink-0" />
+        <span className={show}>{isShadowMode ? "shadow post" : "post"}</span>
       </button>
 
       {/* Wallet Section */}
       <div className="border-t border-border pt-4 relative">
         {isAuthenticated && user ? (
-          <div className="flex items-center justify-between px-3 py-2">
+          <div className={`flex items-center justify-center xl:justify-between px-1 xl:px-3 py-2`}>
             <a href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {user.profile_picture ? (
                   <img src={getImageUrl(user.profile_picture, "")} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <Wallet className="w-4 h-4 text-primary" />
                 )}
               </div>
-              <div className="text-sm">
+              <div className={`text-sm ${showBlock}`}>
                 <p className="text-foreground">{user.username || "Anonymous"}</p>
                 <p className="text-xs text-muted-foreground">{shortenAddress(user.wallet_address)}</p>
               </div>
             </a>
             <button
               onClick={disconnectWallet}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className={`text-muted-foreground hover:text-foreground transition-colors ${showBlock}`}
               title="Disconnect"
             >
               <LogOut className="w-4 h-4" />
@@ -364,14 +368,14 @@ export function LeftSidebar() {
             <button
               onClick={() => setShowWalletMenu(!showWalletMenu)}
               disabled={isConnecting || authLoading}
-              className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className={`w-full flex items-center justify-center gap-2 px-1 xl:px-3 py-3 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50`}
             >
               {isConnecting || authLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
               ) : (
-                <Wallet className="w-4 h-4" />
+                <Wallet className="w-4 h-4 flex-shrink-0" />
               )}
-              <span>{isConnecting ? "connecting..." : "connect_wallet"}</span>
+              <span className={show}>{isConnecting ? "connecting..." : "connect_wallet"}</span>
             </button>
 
             {/* Wallet Selection Menu */}

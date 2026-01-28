@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getImageUrl } from "@/lib/utils";
+import { useToast } from "@/components/toast";
+import { getUserX25519Pubkey } from "@/lib/shadow/privateMessages";
 
 function formatSol(lamports: bigint): string {
   const sol = Number(lamports) / LAMPORTS_PER_SOL;
@@ -119,6 +121,8 @@ function ShadowProfileContent() {
   const searchParams = useSearchParams();
   const name = decodeURIComponent(params.name as string);
   const { wallets: myWallets, refreshWalletNames } = useShadow();
+  const { showToast } = useToast();
+  const [checkingDm, setCheckingDm] = useState(false);
   const shouldRefresh = searchParams.get("refresh") === "1";
 
   const [isLoading, setIsLoading] = useState(true);
@@ -305,15 +309,31 @@ function ShadowProfileContent() {
           {/* Send Message Button - only show if not own wallet */}
           {walletPubkey && !isOwnWallet && (
             <button
-              onClick={() => router.push(`/messages?contact=${encodeURIComponent(name)}&wallet=${walletPubkey}`)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
+              onClick={async () => {
+                setCheckingDm(true);
+                try {
+                  const pubkey = await getUserX25519Pubkey(walletPubkey);
+                  if (!pubkey) {
+                    showToast("This user hasn't activated private messages", "error");
+                    return;
+                  }
+                  router.push(`/messages?contact=${encodeURIComponent(name)}&wallet=${walletPubkey}`);
+                } catch {
+                  showToast("Failed to check messaging status", "error");
+                } finally {
+                  setCheckingDm(false);
+                }
+              }}
+              disabled={checkingDm}
+              className={`flex items-center gap-2 p-2 md:px-4 md:py-2 rounded-full transition-colors ${
                 isPremium
                   ? "bg-pink-500/20 text-pink-500 hover:bg-pink-500/30"
                   : "bg-primary/20 text-primary hover:bg-primary/30"
-              }`}
+              } disabled:opacity-50`}
+              title="Send message"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span className="text-sm font-medium">Message</span>
+              {checkingDm ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageSquare className="w-5 h-5" />}
+              <span className="hidden md:inline text-sm font-medium">Message</span>
             </button>
           )}
         </div>

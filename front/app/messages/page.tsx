@@ -25,6 +25,7 @@ import {
   UserPlus,
   Crown,
   ExternalLink,
+  ArrowLeft,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -231,11 +232,18 @@ function MessagesContent() {
         selectContact(existingContact);
       } else {
         // Add new contact and select it
-        addContact(walletAddress, contactName);
-        setPendingSelectWallet(walletAddress);
+        (async () => {
+          try {
+            await addContact(walletAddress, contactName);
+            setPendingSelectWallet(walletAddress);
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : "Failed to add contact";
+            showToast(msg, "error");
+          }
+        })();
       }
     }
-  }, [searchParams, isUnlocked, contacts, router, selectContact, addContact]);
+  }, [searchParams, isUnlocked, contacts, router, selectContact, addContact, showToast]);
 
   // Load premium status for contacts
   useEffect(() => {
@@ -608,7 +616,7 @@ function MessagesContent() {
   // Shadow wallet not unlocked state
   if (!shadowUnlocked || !selectedWallet) {
     return (
-      <div className="border-x border-border min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8">
         <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-6">
           <EyeOff className="w-10 h-10 text-primary" />
         </div>
@@ -630,7 +638,7 @@ function MessagesContent() {
   // Messages unlocking in progress (auto-unlock)
   if (!isUnlocked) {
     return (
-      <div className="border-x border-border min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8">
         <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-6">
           <Loader2 className="w-10 h-10 text-primary animate-spin" />
         </div>
@@ -651,7 +659,7 @@ function MessagesContent() {
   // Keys mismatch warning
   if (keysMismatch) {
     return (
-      <div className="border-x border-border min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8">
         <div className="w-20 h-20 rounded-full bg-amber-500/20 flex items-center justify-center mb-6">
           <AlertTriangle className="w-10 h-10 text-amber-500" />
         </div>
@@ -685,7 +693,7 @@ function MessagesContent() {
   const isEmptyWallet = walletBalanceLamports === 0;
   if (isEmptyWallet && !isRegistered) {
     return (
-      <div className="border-x border-border min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8">
         <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-6">
           <Wallet className="w-10 h-10 text-primary" />
         </div>
@@ -741,29 +749,18 @@ function MessagesContent() {
 
   // Main messaging UI - always show it, with optional status banner
   return (
-    <div className="border-x border-border h-screen flex overflow-hidden">
-      {/* Left Panel - Contact List (1/3 width) */}
-      <div className="w-1/3 border-r border-border flex flex-col h-full overflow-hidden">
-        {/* Header */}
+    <div className="border-x border-border h-[calc(100vh-3.5rem)] md:h-screen flex overflow-hidden">
+      {/* Left Panel - Contact List */}
+      <div className={`${selectedContact ? "hidden md:flex" : "flex"} w-full md:w-1/3 border-r border-border flex-col h-full overflow-hidden`}>
+        {/* Header + Search */}
         <div className="flex-shrink-0 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3">
-          <h1 className="text-xl font-bold text-primary">// messages</h1>
-          <p className="text-xs text-primary/70 mt-0.5">encrypted via Arcium</p>
-          <div className="flex items-center gap-2 mt-1">
-            <EyeOff className="w-3 h-3 text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">
-              {shadowWalletAddress?.slice(0, 6)}...{shadowWalletAddress?.slice(-4)}
-            </span>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-xl font-bold text-primary">// messages</h1>
+            <span className="text-xs text-muted-foreground font-mono">{walletBalanceSol.toFixed(4)} SOL</span>
           </div>
-
-          {/* Shadow wallet balance */}
-          <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded bg-primary/10 text-xs w-fit">
-            <EyeOff className="w-3 h-3 text-primary" />
-            <span className="text-primary font-mono">{walletBalanceSol.toFixed(4)} SOL</span>
-          </div>
-
           {/* Status banners */}
           {isFunding && (
-            <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded bg-primary/10 text-xs text-primary border border-primary/20">
+            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded bg-primary/10 text-xs text-primary border border-primary/20">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span className="flex-1">
                 {fundingStep === "signing" && "Sign transaction in wallet..."}
@@ -773,28 +770,24 @@ function MessagesContent() {
             </div>
           )}
           {fundsIncomingTimer !== null && !isFunding && (
-            <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded bg-[#14F195]/10 text-xs text-[#14F195] border border-[#14F195]/20">
+            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded bg-[#14F195]/10 text-xs text-[#14F195] border border-[#14F195]/20">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span className="flex-1">Funds incoming...</span>
               <span className="font-mono bg-[#14F195]/20 px-1.5 py-0.5 rounded">{fundsIncomingTimer}s</span>
             </div>
           )}
           {isCurrentlyRegistering && (
-            <div className="flex items-center gap-2 mt-2 px-2 py-1 rounded bg-primary/10 text-xs text-primary">
+            <div className="flex items-center gap-2 mb-3 px-2 py-1 rounded bg-primary/10 text-xs text-primary">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span>Setting up messaging...</span>
             </div>
           )}
           {needsRegistration && !hasEnoughSol && !isFunding && (
-            <div className="flex items-center gap-2 mt-2 px-2 py-1 rounded bg-amber-500/10 text-xs text-amber-500">
+            <div className="flex items-center gap-2 mb-3 px-2 py-1 rounded bg-amber-500/10 text-xs text-amber-500">
               <Wallet className="w-3 h-3" />
               <span>Fund wallet to enable sending ({walletBalanceSol.toFixed(4)} SOL)</span>
             </div>
           )}
-        </div>
-
-        {/* Search */}
-        <div className="px-4 py-3 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -956,6 +949,16 @@ function MessagesContent() {
                         <Crown className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />
                       )}
                     </div>
+                    {(() => {
+                      const msgs = allMessagesByContact.get(contact.walletAddress) || [];
+                      if (msgs.length === 0) return null;
+                      const last = msgs.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
+                      return (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {last.isOutgoing ? "you: " : ""}{last.content}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -964,8 +967,8 @@ function MessagesContent() {
         </div>
       </div>
 
-      {/* Right Panel - Chat Area (2/3 width) */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      {/* Right Panel - Chat Area */}
+      <div className={`${selectedContact ? "flex" : "hidden md:flex"} flex-1 flex-col h-full overflow-hidden`}>
         {selectedContact ? (
           (() => {
             const selectedPremiumInfo = contactPremiumInfo.get(selectedContact.walletAddress);
@@ -978,6 +981,13 @@ function MessagesContent() {
                 <div className="flex-shrink-0 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
+                      {/* Back button - mobile only */}
+                      <button
+                        onClick={() => selectContact(null as any)}
+                        className="md:hidden p-1.5 -ml-1.5 rounded-full hover:bg-muted transition-colors"
+                      >
+                        <ArrowLeft className="w-5 h-5 text-foreground" />
+                      </button>
                       <div
                         onClick={() => router.push(`/shadow/${encodeURIComponent(selectedContact.name)}`)}
                         className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 transition-all ${
@@ -1096,8 +1106,8 @@ function MessagesContent() {
             );
           })()
         ) : (
-          /* Empty state - no contact selected */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          /* Empty state - no contact selected (hidden on mobile since contact list is shown) */
+          <div className="hidden md:flex flex-1 flex-col items-center justify-center p-8 text-center">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
               <Mail className="w-10 h-10 text-primary" />
             </div>

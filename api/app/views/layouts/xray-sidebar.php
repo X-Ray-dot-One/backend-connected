@@ -33,7 +33,7 @@ $isShadowMode = isset($_SESSION['shadow_mode']) && $_SESSION['shadow_mode'];
         </button>
 
         <p class="mode-toggle-label">
-            <?= $isShadowMode ? '// encrypted via Arcium' : '// wallet visible' ?>
+            <?= $isShadowMode ? '// encrypted' : '// wallet visible' ?>
         </p>
     </div>
 

@@ -12,6 +12,7 @@ import {
   Target,
   ExternalLink,
   Crown,
+  Globe,
 } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -23,6 +24,8 @@ import { getImageUrl } from "@/lib/utils";
 import { getTop20Posts, getRecentPosts, type TopPost } from "@/lib/shadow/topPosts";
 import { formatSol } from "@/lib/shadow/postService";
 import { extractXUsername, extractXrayUsername } from "@/lib/shadow/targetProfile";
+import { NddPurchaseModal } from "@/components/ndd-purchase-modal";
+import type { PremiumNdd } from "@/lib/api";
 
 // Cache for shadow wallet names to avoid repeated API calls
 const shadowNameCache = new Map<string, string>();
@@ -385,6 +388,9 @@ export function MainFeed() {
   const [shadowPosts, setShadowPosts] = useState<TopPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nddList, setNddList] = useState<PremiumNdd[]>([]);
+  const [selectedNdd, setSelectedNdd] = useState<PremiumNdd | null>(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     setIsLoading(true);
@@ -456,6 +462,15 @@ export function MainFeed() {
     registerRefreshCallback(fetchPosts);
   }, [registerRefreshCallback, fetchPosts]);
 
+  // Fetch NDD list for mobile inline recommendations (shadow mode only)
+  useEffect(() => {
+    if (isShadowMode) {
+      api.getPremiumNddList(6).then(res => {
+        setNddList(res.ndds || []);
+      }).catch(() => {});
+    }
+  }, [isShadowMode]);
+
   const handleLike = async (postId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAuthenticated) {
@@ -505,21 +520,21 @@ export function MainFeed() {
   };
 
   return (
-    <div className="flex-1 border-r border-border">
-      {/* Header */}
-      <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border z-10">
-        <div className="px-4 py-4">
-          <h1 className="text-xl font-bold text-primary">
-            {isShadowMode ? "// shadow_feed" : "// public_feed"}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isShadowMode
-              ? "You are browsing anonymously via Privacy Cash encryption"
-              : "Your wallet identity is visible to others"}
-          </p>
-        </div>
+    <div className="flex-1 xl:border-r border-border">
+      {/* Title - scrolls away */}
+      <div className="px-4 py-4 border-b border-border">
+        <h1 className="text-xl font-bold text-primary">
+          {isShadowMode ? "// shadow_feed" : "// public_feed"}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isShadowMode
+            ? "You are browsing anonymously via Privacy Cash encryption"
+            : "Your wallet identity is visible to others"}
+        </p>
+      </div>
 
-        {/* Tabs */}
+      {/* Tabs - sticky */}
+      <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border z-10">
         <div className="flex">
           <button
             onClick={() => setActiveTab("for_you")}
@@ -575,12 +590,45 @@ export function MainFeed() {
               <p className="text-sm mt-2">Be the first to post anonymously!</p>
             </div>
           ) : (
-            shadowPosts.map((post) => (
-              <ShadowPostCard
-                key={post.pubkey}
-                post={post}
-                isOwnPost={shadowWallets.some(w => w.publicKey === post.author)}
-              />
+            shadowPosts.map((post, index) => (
+              <div key={post.pubkey}>
+                <ShadowPostCard
+                  post={post}
+                  isOwnPost={shadowWallets.some(w => w.publicKey === post.author)}
+                />
+                {/* Mobile NDD recommendation after every 10th post */}
+                {nddList.length > 0 && (index + 1) % 10 === 0 && index < shadowPosts.length - 1 && (() => {
+                  const nddIndex = Math.floor(index / 10) % nddList.length;
+                  const ndd = nddList[nddIndex];
+                  return (
+                    <div className="xl:hidden border-b border-border px-4 py-3 bg-card/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Globe className="w-3.5 h-3.5 text-pink-500" />
+                        <span className="text-[11px] text-muted-foreground font-medium">premium identity</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={ndd.pfp ? getImageUrl(ndd.pfp, "") : `https://api.dicebear.com/7.x/shapes/svg?seed=${ndd.name}&backgroundColor=ec4899,a855f7,8b5cf6`}
+                            alt={ndd.name}
+                            className="w-10 h-10 rounded-lg object-cover"
+                          />
+                          <div>
+                            <p className="font-medium text-pink-500 text-sm">{ndd.name}</p>
+                            <p className="text-xs text-muted-foreground">{ndd.cost} SOL</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { setSelectedNdd(ndd); setIsPurchaseModalOpen(true); }}
+                          className="px-3 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-full hover:bg-pink-500/90 transition-colors"
+                        >
+                          buy
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             ))
           )
         ) : posts.length === 0 ? (
@@ -664,6 +712,15 @@ export function MainFeed() {
           ))
         )}
       </div>
+
+      {/* NDD Purchase Modal */}
+      {selectedNdd && (
+        <NddPurchaseModal
+          isOpen={isPurchaseModalOpen}
+          onClose={() => { setIsPurchaseModalOpen(false); setSelectedNdd(null); }}
+          ndd={selectedNdd}
+        />
+      )}
     </div>
   );
 }

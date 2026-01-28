@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
-import { ChevronDown, Check, Plus, User, Loader2, Crown } from "lucide-react";
+import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Sun, Moon } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useShadow } from "@/contexts/shadow-context";
@@ -53,8 +53,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { isShadowMode } = useMode();
-  const { user, showProfileSetup, closeProfileSetup, refreshUser } = useAuth();
+  const { isShadowMode, toggleMode } = useMode();
+  const { user, isAuthenticated, showProfileSetup, closeProfileSetup, refreshUser } = useAuth();
   const {
     isUnlocked: isShadowUnlocked,
     isRestoring: isShadowRestoring,
@@ -123,15 +123,15 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Global Identity Selector - Shadow mode only */}
       {isShadowMode && !isShadowRestoring && (
-        <div className="fixed top-4 right-[25rem] z-50">
+        <div className="hidden md:block fixed md:top-4 md:right-4 xl:right-[25rem] z-50">
           {!isShadowUnlocked ? (
             /* Not unlocked yet - show link to profile */
             <a
               href="/profile"
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-primary/30 shadow-lg hover:bg-primary/10 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 md:gap-2 md:px-4 md:py-2 rounded-full bg-card border border-primary/30 shadow-lg hover:bg-primary/10 transition-colors"
             >
               <User className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary font-medium">unlock shadow wallets →</span>
+              <span className="text-xs md:text-sm text-primary font-medium">unlock →</span>
             </a>
           ) : shadowWallets.length === 0 ? (
             /* No wallets yet - show generate first button */
@@ -140,14 +140,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                 await generateNewWallet();
               }}
               disabled={shadowLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 md:gap-2 md:px-4 md:py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {shadowLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              <span className="text-sm font-medium">generate first shadow identity</span>
+              <span className="text-xs md:text-sm font-medium hidden md:inline">generate first shadow identity</span>
+              <span className="text-xs font-medium md:hidden">new identity</span>
             </button>
           ) : (
             /* Has wallets - show selector dropdown */
@@ -159,24 +160,26 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div className="relative">
                   <button
                     onClick={() => setIsIdentityOpen(!isIdentityOpen)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full bg-card shadow-lg hover:bg-primary/10 transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 md:gap-2 md:px-4 md:py-2 rounded-full bg-card shadow-lg hover:bg-primary/10 transition-colors ${
                       isSelectedPremium ? "border border-pink-500/50" : "border border-primary/30"
                     }`}
                   >
                     {isSelectedPremium ? (
-                      <Crown className="w-4 h-4 text-pink-500" />
+                      <Crown className="w-3.5 h-3.5 md:w-4 md:h-4 text-pink-500" />
                     ) : (
-                      <User className="w-4 h-4 text-primary" />
+                      <User className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
                     )}
-                    <span className="text-xs text-muted-foreground">posting as</span>
-                    <span className={`text-sm font-medium ${isSelectedPremium ? "text-pink-500" : "text-primary"}`}>
-                      {selectedWallet?.name || "Select wallet"}
+                    <span className="hidden md:inline text-xs text-muted-foreground">posting as</span>
+                    <span className={`text-xs md:text-sm font-medium max-w-[120px] md:max-w-none truncate ${isSelectedPremium ? "text-pink-500" : "text-primary"}`}>
+                      {selectedWallet?.name || "Select"}
                     </span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${isSelectedPremium ? "text-pink-500" : "text-primary"} ${isIdentityOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`w-3.5 h-3.5 md:w-4 md:h-4 transition-transform ${isSelectedPremium ? "text-pink-500" : "text-primary"} ${isIdentityOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {isIdentityOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-y-auto">
+                    <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsIdentityOpen(false)} />
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg py-1 max-h-80 overflow-y-auto z-50">
                       {shadowWallets.map((wallet, index) => {
                         const walletPremiumStatus = premiumWallets.get(wallet.publicKey);
                         const isPremium = walletPremiumStatus?.isPremium || false;
@@ -224,6 +227,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                         </button>
                       </div>
                     </div>
+                    </>
                   )}
                 </div>
               );
@@ -232,10 +236,122 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       )}
 
-      <main className="ml-64 mr-96">
+      <main className="ml-0 md:ml-16 xl:ml-64 mr-0 xl:mr-96 pb-16 md:pb-0">
           {children}
         </main>
-        <RightPanel />
+        <div className="hidden xl:block">
+          <RightPanel />
+        </div>
+
+        {/* Mobile Mode Toggle - fixed bottom-right */}
+        <button
+          onClick={toggleMode}
+          className={`md:hidden fixed bottom-[4.5rem] right-4 z-50 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-colors ${
+            isShadowMode
+              ? "bg-card text-primary border border-primary/40"
+              : "bg-card text-amber-500 border border-amber-500/40"
+          }`}
+        >
+          {isShadowMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
+
+        {/* Mobile Bottom Navigation Bar */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border safe-area-bottom">
+          <div className="grid grid-cols-5 h-14">
+            <a href="/" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
+              <Home className="w-5 h-5" />
+              <span className="text-[10px]">home</span>
+            </a>
+            <button onClick={() => setIsSearchOpen(true)} className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
+              <Search className="w-5 h-5" />
+              <span className="text-[10px]">explore</span>
+            </button>
+            <div className="relative flex items-center justify-center">
+              {/* Mobile identity selector - above post button */}
+              {isShadowMode && isShadowUnlocked && shadowWallets.length > 0 && selectedWallet && (
+                <>
+                  <button
+                    onClick={() => setIsIdentityOpen(!isIdentityOpen)}
+                    className={`absolute -top-8 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap shadow-lg ${
+                      (() => {
+                        const sp = premiumWallets.get(selectedWallet.publicKey);
+                        return sp?.isPremium
+                          ? "bg-pink-500/20 text-pink-500 border border-pink-500/40"
+                          : "bg-card text-primary border border-primary/40";
+                      })()
+                    }`}
+                  >
+                    {(() => {
+                      const sp = premiumWallets.get(selectedWallet.publicKey);
+                      return sp?.isPremium ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />;
+                    })()}
+                    <span className="max-w-[90px] truncate">{selectedWallet.name}</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${isIdentityOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {isIdentityOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsIdentityOpen(false)} />
+                      <div className="absolute bottom-full mb-8 left-1/2 -translate-x-1/2 w-48 bg-card border border-border rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto z-50">
+                        {shadowWallets.map((wallet, index) => {
+                          const wp = premiumWallets.get(wallet.publicKey);
+                          const isPrem = wp?.isPremium || false;
+                          return (
+                            <button
+                              key={wallet.publicKey}
+                              onClick={() => { selectWallet(index); setIsIdentityOpen(false); }}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors ${
+                                selectedWalletIndex === index
+                                  ? isPrem ? "bg-pink-500/20 text-pink-500" : "bg-primary/20 text-primary"
+                                  : isPrem ? "text-pink-500 hover:bg-pink-500/10" : "text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                {isPrem && <Crown className="w-3 h-3 text-pink-500" />}
+                                <span className="truncate">{wallet.name}</span>
+                              </div>
+                              {selectedWalletIndex === index && <Check className="w-3.5 h-3.5" />}
+                            </button>
+                          );
+                        })}
+                        <div className="border-t border-border mt-1 pt-1">
+                          <button
+                            onClick={async () => { await generateNewWallet(); setIsIdentityOpen(false); }}
+                            disabled={shadowLoading}
+                            className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                          >
+                            {shadowLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                            <span>generate new</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+              <button
+                onClick={isAuthenticated ? () => setIsPostModalOpen(true) : undefined}
+                className={`flex items-center justify-center w-10 h-10 rounded-full ${isAuthenticated ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+              >
+                <PenSquare className="w-5 h-5" />
+              </button>
+            </div>
+            {isShadowMode ? (
+              <a href="/messages" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
+                <Mail className="w-5 h-5" />
+                <span className="text-[10px]">messages</span>
+              </a>
+            ) : (
+              <a href="/notifications" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
+                <Bell className="w-5 h-5" />
+                <span className="text-[10px]">notifs</span>
+              </a>
+            )}
+            <a href={isAuthenticated ? "/profile" : "#"} className={`flex flex-col items-center justify-center gap-0.5 ${isAuthenticated ? "text-foreground active:text-primary" : "text-muted-foreground/50"}`}>
+              <User className="w-5 h-5" />
+              <span className="text-[10px]">profile</span>
+            </a>
+          </div>
+        </nav>
 
         {/* Post Modal - rendered at root level for proper CSS inheritance */}
         <PostModal
