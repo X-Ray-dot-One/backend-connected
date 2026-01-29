@@ -154,6 +154,7 @@ export async function getFollowing(userId: number, limit = 50) {
 export interface Post {
   id: number;
   content: string;
+  image: string | null;
   user_id: number;
   username: string;
   profile_picture: string | null;
@@ -165,8 +166,30 @@ export interface Post {
   has_liked: boolean;
 }
 
+export interface UserReply {
+  comment_id: number;
+  comment_content: string;
+  time_ago: string;
+  post_id: number;
+  post_content: string;
+  post_username: string;
+  post_profile_picture: string | null;
+  post_wallet: string | null;
+  username: string;
+  profile_picture: string | null;
+  wallet_address: string | null;
+}
+
 export async function getPost(postId: number) {
   return apiCall<{ success: boolean; post: Post }>(`get-post&id=${postId}`);
+}
+
+export async function getUserReplies(userId: number, limit = 50) {
+  return apiCall<{ success: boolean; replies: UserReply[] }>(`get-user-replies&user_id=${userId}&limit=${limit}`);
+}
+
+export async function getUserLikedPosts(userId: number, limit = 50) {
+  return apiCall<{ success: boolean; posts: Post[] }>(`get-user-likes&user_id=${userId}&limit=${limit}`);
 }
 
 export async function getPosts(options?: {
@@ -191,7 +214,30 @@ export async function createPost(content: string, options?: {
   targetPlatform?: 'xray' | 'twitter';
   boostAmount?: number;
   identity?: string;
+  image?: File;
 }) {
+  if (options?.image) {
+    // Use FormData for image upload
+    const formData = new FormData();
+    formData.append('content', content);
+    formData.append('image', options.image);
+    if (options.shadowMode) formData.append('shadow_mode', '1');
+    if (options.targetUser) formData.append('target_user', options.targetUser);
+    if (options.targetPlatform) formData.append('target_platform', options.targetPlatform);
+    if (options.boostAmount) formData.append('boost_amount', String(options.boostAmount));
+    if (options.identity) formData.append('identity', options.identity);
+
+    const url = `${API_BASE}/?action=create-post`;
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!data.success && data.error) throw new Error(data.error);
+    return data as { success: boolean; post_id: number };
+  }
+
   return apiCall<{ success: boolean; post_id: number }>('create-post', {
     method: 'POST',
     body: JSON.stringify({

@@ -448,6 +448,7 @@ elseif ($action === 'get-post') {
         'post' => [
             'id' => $post['id'],
             'content' => $post['content'],
+            'image' => $post['image'] ?? null,
             'user_id' => $post['user_id'],
             'username' => $postUser['username'] ?? $post['twitter_username'] ?? 'Anonymous',
             'profile_picture' => $postUser['profile_picture'] ?? $post['twitter_profile_image'],
@@ -502,6 +503,7 @@ elseif ($action === 'get-posts') {
         return [
             'id' => $post['id'],
             'content' => $post['content'],
+            'image' => $post['image'] ?? null,
             'user_id' => $post['user_id'],
             'username' => $post['user_username'] ?? $post['twitter_username'] ?? 'Anonymous',
             'profile_picture' => $post['user_profile_picture'] ?? $post['twitter_profile_image'],
@@ -518,6 +520,97 @@ elseif ($action === 'get-posts') {
         'success' => true,
         'posts' => $formattedPosts
     ]);
+    exit;
+}
+
+// Get replies (comments) by a user
+elseif ($action === 'get-user-replies') {
+    header('Content-Type: application/json');
+
+    $userId = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
+    $limit = intval($_GET['limit'] ?? 50);
+
+    if (!$userId) {
+        echo json_encode(['success' => false, 'error' => 'user_id required']);
+        exit;
+    }
+
+    require_once __DIR__ . '/app/models/Post.php';
+    $postModel = new Post();
+    $currentUserId = AuthController::getCurrentUserId();
+
+    $replies = $postModel->getRepliesByUserId($userId, $limit);
+
+    $formattedReplies = array_map(function($reply) use ($postModel, $currentUserId) {
+        $time = strtotime($reply['comment_created_at']);
+        $diff = time() - $time;
+        if ($diff < 60) $timeAgo = $diff . 's';
+        elseif ($diff < 3600) $timeAgo = floor($diff / 60) . 'm';
+        elseif ($diff < 86400) $timeAgo = floor($diff / 3600) . 'h';
+        else $timeAgo = floor($diff / 86400) . 'd';
+
+        return [
+            'comment_id' => $reply['comment_id'],
+            'comment_content' => $reply['comment_content'],
+            'time_ago' => $timeAgo,
+            'post_id' => $reply['post_id'],
+            'post_content' => $reply['post_content'],
+            'post_username' => $reply['post_username'] ?? 'Anonymous',
+            'post_profile_picture' => $reply['post_profile_picture'],
+            'post_wallet' => $reply['post_wallet'],
+            'username' => $reply['username'],
+            'profile_picture' => $reply['profile_picture'],
+            'wallet_address' => $reply['wallet_address'],
+        ];
+    }, $replies);
+
+    echo json_encode(['success' => true, 'replies' => $formattedReplies]);
+    exit;
+}
+
+// Get posts liked by a user
+elseif ($action === 'get-user-likes') {
+    header('Content-Type: application/json');
+
+    $userId = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
+    $limit = intval($_GET['limit'] ?? 50);
+
+    if (!$userId) {
+        echo json_encode(['success' => false, 'error' => 'user_id required']);
+        exit;
+    }
+
+    require_once __DIR__ . '/app/models/Post.php';
+    $postModel = new Post();
+    $currentUserId = AuthController::getCurrentUserId();
+
+    $posts = $postModel->getLikedPostsByUserId($userId, $limit);
+
+    $formattedPosts = array_map(function($post) use ($postModel, $currentUserId) {
+        $time = strtotime($post['created_at']);
+        $diff = time() - $time;
+        if ($diff < 60) $timeAgo = $diff . 's';
+        elseif ($diff < 3600) $timeAgo = floor($diff / 60) . 'm';
+        elseif ($diff < 86400) $timeAgo = floor($diff / 3600) . 'h';
+        else $timeAgo = floor($diff / 86400) . 'd';
+
+        return [
+            'id' => $post['id'],
+            'content' => $post['content'],
+            'image' => $post['image'] ?? null,
+            'user_id' => $post['user_id'],
+            'username' => $post['user_username'] ?? $post['twitter_username'] ?? 'Anonymous',
+            'profile_picture' => $post['user_profile_picture'] ?? $post['twitter_profile_image'],
+            'wallet_address' => $post['user_wallet'] ?? null,
+            'created_at' => $post['created_at'],
+            'time_ago' => $timeAgo,
+            'like_count' => $postModel->getLikeCount($post['id']),
+            'comment_count' => $postModel->getCommentCount($post['id']),
+            'has_liked' => $currentUserId ? $postModel->hasUserLiked($post['id'], $currentUserId) : false
+        ];
+    }, $posts);
+
+    echo json_encode(['success' => true, 'posts' => $formattedPosts]);
     exit;
 }
 
@@ -942,22 +1035,34 @@ elseif ($action === 'create-post') {
         exit;
     }
 
-    // Support both JSON and form data
-    $input = json_decode(file_get_contents('php://input'), true);
-    if ($input) {
-        $content = trim($input['content'] ?? '');
-        $isShadowMode = !empty($input['shadow_mode']);
-        $targetUser = trim($input['target_user'] ?? '');
-        $targetPlatform = trim($input['target_platform'] ?? 'xray');
-        $boostAmount = floatval($input['boost_amount'] ?? 0);
-        $identity = trim($input['identity'] ?? '');
-    } else {
+    // Support both JSON and multipart form data
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    $isMultipart = strpos($contentType, 'multipart/form-data') !== false;
+
+    if ($isMultipart) {
         $content = trim($_POST['content'] ?? '');
-        $isShadowMode = isset($_POST['shadow_mode']) && $_POST['shadow_mode'] === '1';
+        $isShadowMode = !empty($_POST['shadow_mode']);
         $targetUser = trim($_POST['target_user'] ?? '');
         $targetPlatform = trim($_POST['target_platform'] ?? 'xray');
         $boostAmount = floatval($_POST['boost_amount'] ?? 0);
         $identity = trim($_POST['identity'] ?? '');
+    } else {
+        $input = json_decode(file_get_contents('php://input'), true);
+        if ($input) {
+            $content = trim($input['content'] ?? '');
+            $isShadowMode = !empty($input['shadow_mode']);
+            $targetUser = trim($input['target_user'] ?? '');
+            $targetPlatform = trim($input['target_platform'] ?? 'xray');
+            $boostAmount = floatval($input['boost_amount'] ?? 0);
+            $identity = trim($input['identity'] ?? '');
+        } else {
+            $content = trim($_POST['content'] ?? '');
+            $isShadowMode = isset($_POST['shadow_mode']) && $_POST['shadow_mode'] === '1';
+            $targetUser = trim($_POST['target_user'] ?? '');
+            $targetPlatform = trim($_POST['target_platform'] ?? 'xray');
+            $boostAmount = floatval($_POST['boost_amount'] ?? 0);
+            $identity = trim($_POST['identity'] ?? '');
+        }
     }
 
     // Validation
@@ -976,6 +1081,46 @@ elseif ($action === 'create-post') {
         exit;
     }
 
+    // Handle image upload
+    $imagePath = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $maxSize = 5 * 1024 * 1024; // 5MB
+        if ($_FILES['image']['size'] > $maxSize) {
+            echo json_encode(['success' => false, 'error' => 'Image must be less than 5MB']);
+            exit;
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $_FILES['image']['tmp_name']);
+        finfo_close($finfo);
+
+        if (!in_array($mimeType, $allowedTypes)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid image type. Allowed: JPG, PNG, GIF, WebP']);
+            exit;
+        }
+
+        $ext = match($mimeType) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => 'jpg'
+        };
+
+        $uploadDir = __DIR__ . '/public/uploads/posts/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $filename = 'post_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+        $destination = $uploadDir . $filename;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $destination)) {
+            $imagePath = 'uploads/posts/' . $filename;
+        }
+    }
+
     require_once __DIR__ . '/app/models/Post.php';
     $postModel = new Post();
 
@@ -989,7 +1134,7 @@ elseif ($action === 'create-post') {
         $content,
         $currentUser['profile_picture'] ?? null,
         $userId,
-        $isShadowMode ? $boostAmount : 0.001
+        $imagePath
     );
 
     if ($postId) {

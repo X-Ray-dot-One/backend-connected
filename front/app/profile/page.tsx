@@ -30,6 +30,7 @@ import {
   Zap,
   Target,
   Crown,
+  LogOut,
 } from "lucide-react";
 
 import { getImageUrl, getDefaultAvatar, DEFAULT_BANNER } from "@/lib/utils";
@@ -191,7 +192,7 @@ function ProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isShadowMode } = useMode();
-  const { user, isAuthenticated, isLoading: authLoading, refreshUser, stats: authStats } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, refreshUser, stats: authStats, logout } = useAuth();
   const {
     isUnlocked: isShadowUnlocked,
     wallets: shadowWallets,
@@ -214,6 +215,10 @@ function ProfileContent() {
   const [followersModalTab, setFollowersModalTab] = useState<"followers" | "following">("followers");
   const [posts, setPosts] = useState<api.Post[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [replies, setReplies] = useState<api.UserReply[]>([]);
+  const [isLoadingReplies, setIsLoadingReplies] = useState(false);
+  const [likedPosts, setLikedPosts] = useState<api.Post[]>([]);
+  const [isLoadingLikes, setIsLoadingLikes] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localPostsCount, setLocalPostsCount] = useState(0);
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -253,6 +258,26 @@ function ProfileContent() {
       loadPosts();
     }
   }, [user?.id]);
+
+  // Load replies when tab is selected
+  useEffect(() => {
+    if (activeTab === "replies" && user?.id && replies.length === 0 && !isLoadingReplies) {
+      setIsLoadingReplies(true);
+      api.getUserReplies(user.id).then((res) => {
+        if (res.success) setReplies(res.replies);
+      }).catch(console.error).finally(() => setIsLoadingReplies(false));
+    }
+  }, [activeTab, user?.id]);
+
+  // Load liked posts when tab is selected
+  useEffect(() => {
+    if (activeTab === "likes" && user?.id && likedPosts.length === 0 && !isLoadingLikes) {
+      setIsLoadingLikes(true);
+      api.getUserLikedPosts(user.id).then((res) => {
+        if (res.success) setLikedPosts(res.posts);
+      }).catch(console.error).finally(() => setIsLoadingLikes(false));
+    }
+  }, [activeTab, user?.id]);
 
   // Load shadow posts targeting me (load on mount to show count in tab)
   useEffect(() => {
@@ -324,8 +349,8 @@ function ProfileContent() {
       showToast("Please select a valid image (JPEG, PNG, GIF, or WebP)", "error");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      showToast("Profile picture must be less than 2MB", "error");
+    if (file.size > 7 * 1024 * 1024) {
+      showToast("Profile picture must be less than 7MB", "error");
       return;
     }
 
@@ -342,8 +367,8 @@ function ProfileContent() {
       showToast("Please select a valid image (JPEG, PNG, GIF, or WebP)", "error");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Banner must be less than 5MB", "error");
+    if (file.size > 7 * 1024 * 1024) {
+      showToast("Banner must be less than 7MB", "error");
       return;
     }
 
@@ -399,11 +424,12 @@ function ProfileContent() {
   const handleToggleLike = async (postId: number) => {
     try {
       const response = await api.toggleLike(postId);
-      setPosts(posts.map(post =>
+      const updater = (post: api.Post) =>
         post.id === postId
           ? { ...post, has_liked: response.action === 'liked', like_count: response.like_count }
-          : post
-      ));
+          : post;
+      setPosts(posts.map(updater));
+      setLikedPosts(likedPosts.map(updater));
     } catch (error) {
       console.error("Failed to toggle like:", error);
     }
@@ -841,7 +867,7 @@ function ProfileContent() {
         ) : (
           <div className="p-8 text-center">
             <EyeOff className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Select a shadow identity from the dropdown above</p>
+            <p className="text-muted-foreground">select a shadow identity from the dropdown </p>
           </div>
         )}
       </div>
@@ -856,7 +882,6 @@ function ProfileContent() {
   const editAvatarUrl = profilePreview || avatarUrl;
   const editBannerUrl = bannerPreview || bannerUrl;
   const displayName = user!.username ? `@${user!.username}` : "Anonymous";
-  const handle = user!.username ? `@${user!.username}` : `${user!.wallet_address.slice(0, 4)}...${user!.wallet_address.slice(-4)}`;
   const truncatedWallet = `${user!.wallet_address.slice(0, 6)}...${user!.wallet_address.slice(-4)}`;
 
   return (
@@ -872,30 +897,35 @@ function ProfileContent() {
 
       {/* Profile Info */}
       <div className="px-4 pb-4 relative">
-        {/* Avatar */}
-        <div className="absolute -top-12 left-4">
+        {/* Avatar + Actions row */}
+        <div className="flex items-end justify-between -mt-12">
           <img
             src={avatarUrl}
             alt={displayName}
             className="w-24 h-24 rounded-full border-4 border-background object-cover"
           />
-        </div>
-
-        {/* Edit Button */}
-        <div className="flex justify-end pt-3">
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-border text-foreground hover:bg-muted transition-colors"
-          >
-            <Edit3 className="w-4 h-4" />
-            <span className="text-sm">Edit Profile</span>
-          </button>
+          <div className="flex gap-2 mb-1">
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-muted transition-colors text-xs"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Edit</span>
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center justify-center w-8 h-8 rounded-full border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Name & Handle */}
-        <div className="mt-4">
+        <div className="mt-3">
           <h1 className="text-xl font-bold text-foreground">{displayName}</h1>
-          <p className="text-muted-foreground">{handle}</p>
+          <p className="text-sm text-muted-foreground">{truncatedWallet}</p>
         </div>
 
         {/* Bio */}
@@ -1134,6 +1164,132 @@ function ProfileContent() {
             </div>
           </div>
         )))}
+
+        {/* Replies Tab */}
+        {activeTab === "replies" && (isLoadingReplies ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : replies.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No replies yet</p>
+          </div>
+        ) : replies.map((reply) => (
+          <div
+            key={reply.comment_id}
+            onClick={() => router.push(`/post/${reply.post_id}`)}
+            className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
+          >
+            {/* Replying to */}
+            <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+              <MessageCircle className="w-3 h-3" />
+              <span>Replying to</span>
+              <a
+                href={`/user/${reply.post_username}`}
+                className="text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                @{reply.post_username}
+              </a>
+            </div>
+            {/* Original post preview */}
+            <div className="ml-4 pl-3 border-l-2 border-primary/20 mb-2">
+              <p className="text-sm text-muted-foreground line-clamp-2">{reply.post_content}</p>
+            </div>
+            {/* Reply content */}
+            <div className="flex gap-3">
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-10 h-10 rounded-full flex-shrink-0 ring-2 ring-primary/20 object-cover"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-primary">{displayName}</span>
+                  <span className="text-muted-foreground text-sm">{reply.time_ago}</span>
+                </div>
+                <p className="mt-1 text-foreground font-sans">
+                  {renderContentWithMentions(reply.comment_content)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )))}
+
+        {/* Likes Tab */}
+        {activeTab === "likes" && (isLoadingLikes ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : likedPosts.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No liked posts yet</p>
+          </div>
+        ) : likedPosts.map((post) => (
+          <div
+            key={post.id}
+            onClick={() => handlePostClick(post.id)}
+            className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
+          >
+            <div className="flex gap-3">
+              <a
+                href={`/user/${post.username}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img
+                  src={getImageUrl(post.profile_picture, getDefaultAvatar(post.wallet_address || post.username || "user"))}
+                  alt={post.username || "User"}
+                  className="w-10 h-10 rounded-full flex-shrink-0 ring-2 ring-primary/20 object-cover"
+                />
+              </a>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/user/${post.username}`}
+                    className="font-medium text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {post.username || "Anonymous"}
+                  </a>
+                  <span className="text-muted-foreground text-sm">{post.time_ago}</span>
+                </div>
+                <p className="mt-1 text-foreground font-sans">
+                  {renderContentWithMentions(post.content)}
+                </p>
+                <div className="flex items-center gap-6 mt-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleLike(post.id);
+                    }}
+                    className={`flex items-center gap-1.5 transition-colors ${
+                      post.has_liked ? "text-red-500" : "text-muted-foreground hover:text-red-500"
+                    }`}
+                  >
+                    <Heart className={`w-4 h-4 ${post.has_liked ? "fill-current" : ""}`} />
+                    <span className="text-sm">{post.like_count}</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/post/${post.id}`);
+                    }}
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="text-sm">{post.comment_count}</span>
+                  </button>
+                  <button
+                    onClick={(e) => handleShare(post.id, e)}
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Share className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )))}
       </div>
 
       {/* Edit Profile Modal */}
@@ -1146,8 +1302,8 @@ function ProfileContent() {
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-background border border-border rounded-2xl w-full max-w-lg shadow-xl">
+          <div className="fixed inset-0 z-50 flex items-stretch md:items-center justify-center md:p-4">
+            <div className="bg-background border-0 md:border border-border md:rounded-2xl w-full max-w-lg shadow-xl h-full md:h-auto md:max-h-[90vh] overflow-y-auto pb-20 md:pb-0">
               {/* Modal Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-4">

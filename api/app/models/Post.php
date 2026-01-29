@@ -6,6 +6,18 @@ class Post {
 
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
+        $this->ensureImageColumn();
+    }
+
+    private function ensureImageColumn() {
+        try {
+            $stmt = $this->db->query("SHOW COLUMNS FROM posts LIKE 'image'");
+            if ($stmt->rowCount() === 0) {
+                $this->db->exec("ALTER TABLE posts ADD COLUMN image VARCHAR(255) DEFAULT NULL AFTER content");
+            }
+        } catch (PDOException $e) {
+            // Ignore - table might not exist yet
+        }
     }
 
     /**
@@ -13,7 +25,7 @@ class Post {
      */
     public function getAllPosts($limit = 50) {
         $stmt = $this->db->prepare("
-            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.created_at,
+            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.image, p.created_at,
                    u.wallet_address as user_wallet,
                    u.username as user_username,
                    u.profile_picture as user_profile_picture
@@ -32,7 +44,7 @@ class Post {
      */
     public function getPostsByUserId($userId, $limit = 50) {
         $stmt = $this->db->prepare("
-            SELECT id, user_id, twitter_username, twitter_profile_image, content, created_at
+            SELECT id, user_id, twitter_username, twitter_profile_image, content, image, created_at
             FROM posts
             WHERE user_id = :user_id
             ORDER BY created_at DESC
@@ -47,18 +59,24 @@ class Post {
     /**
      * Crée un nouveau post
      */
-    public function createPost($twitterUsername, $content, $profileImage = null, $userId = null) {
+    public function createPost($twitterUsername, $content, $profileImage = null, $userId = null, $image = null) {
         $stmt = $this->db->prepare("
-            INSERT INTO posts (user_id, twitter_username, twitter_profile_image, content)
-            VALUES (:user_id, :username, :profile_image, :content)
+            INSERT INTO posts (user_id, twitter_username, twitter_profile_image, content, image)
+            VALUES (:user_id, :username, :profile_image, :content, :image)
         ");
 
-        return $stmt->execute([
+        $result = $stmt->execute([
             ':user_id' => $userId,
             ':username' => $twitterUsername,
             ':profile_image' => $profileImage,
-            ':content' => $content
+            ':content' => $content,
+            ':image' => $image
         ]);
+
+        if ($result) {
+            return $this->db->lastInsertId();
+        }
+        return false;
     }
 
     /**
@@ -66,7 +84,7 @@ class Post {
      */
     public function getPostById($id) {
         $stmt = $this->db->prepare("
-            SELECT id, user_id, twitter_username, twitter_profile_image, content, created_at
+            SELECT id, user_id, twitter_username, twitter_profile_image, content, image, created_at
             FROM posts
             WHERE id = :id
         ");
@@ -79,7 +97,7 @@ class Post {
      */
     public function getFollowingPosts($userId, $limit = 50) {
         $stmt = $this->db->prepare("
-            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.created_at,
+            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.image, p.created_at,
                    u.wallet_address as user_wallet,
                    u.username as user_username,
                    u.profile_picture as user_profile_picture
@@ -195,11 +213,58 @@ class Post {
     }
 
     /**
+     * Get comments (replies) made by a specific user, with the parent post info
+     */
+    public function getRepliesByUserId($userId, $limit = 50) {
+        $stmt = $this->db->prepare("
+            SELECT c.id as comment_id, c.content as comment_content, c.created_at as comment_created_at,
+                   c.post_id,
+                   p.content as post_content, p.user_id as post_user_id, p.created_at as post_created_at,
+                   pu.username as post_username, pu.profile_picture as post_profile_picture, pu.wallet_address as post_wallet,
+                   u.username, u.profile_picture, u.wallet_address
+            FROM comments c
+            LEFT JOIN posts p ON c.post_id = p.id
+            LEFT JOIN users pu ON p.user_id = pu.id
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.user_id = :user_id
+            ORDER BY c.created_at DESC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Get posts liked by a specific user
+     */
+    public function getLikedPostsByUserId($userId, $limit = 50) {
+        $stmt = $this->db->prepare("
+            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.created_at,
+                   u.wallet_address as user_wallet,
+                   u.username as user_username,
+                   u.profile_picture as user_profile_picture,
+                   l.created_at as liked_at
+            FROM likes l
+            JOIN posts p ON l.post_id = p.id
+            LEFT JOIN users u ON p.user_id = u.id
+            WHERE l.user_id = :user_id
+            ORDER BY l.created_at DESC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Get a post with user info by ID
      */
     public function getPostWithUserById($postId) {
         $stmt = $this->db->prepare("
-            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.created_at,
+            SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.image, p.created_at,
                    u.wallet_address as user_wallet,
                    u.username as user_username,
                    u.profile_picture as user_profile_picture

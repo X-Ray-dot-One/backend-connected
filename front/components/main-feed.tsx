@@ -678,6 +678,13 @@ export function MainFeed() {
                     {renderContentWithMentions(post.content)}
                   </p>
 
+                  {/* Post image */}
+                  {post.image && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-border">
+                      <img src={getImageUrl(post.image, "")} alt="" className="w-full max-h-96 object-cover" />
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="flex items-center gap-6 mt-3">
                     <button

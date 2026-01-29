@@ -79,9 +79,9 @@ export function ProfileSetupModal({
       return;
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      setUsernameError("Image must be less than 2MB");
+    // Validate file size (max 7MB)
+    if (file.size > 7 * 1024 * 1024) {
+      setUsernameError("Image must be less than 7MB");
       return;
     }
 

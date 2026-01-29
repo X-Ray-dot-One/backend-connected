@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
-import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Sun, Moon, Wallet } from "lucide-react";
+import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Sun, Moon, Wallet, EyeOff, Lock } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useShadow } from "@/contexts/shadow-context";
@@ -64,6 +64,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     selectWallet,
     generateNewWallet,
     isLoading: shadowLoading,
+    unlockShadowWallets,
   } = useShadow();
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
@@ -179,7 +180,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <PostModalContext.Provider value={postModalValue}>
     <SearchModalContext.Provider value={searchModalValue}>
-      <div className={`min-h-screen bg-background transition-colors duration-300 ${isShadowMode ? "shadow-mode" : ""}`}>
+      <div className={`h-full overflow-hidden bg-background transition-colors duration-300 ${isShadowMode ? "shadow-mode" : ""}`}>
         <LeftSidebar />
 
       {/* Global Identity Selector - Shadow mode only */}
@@ -297,7 +298,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       )}
 
-      <main className="ml-0 md:ml-16 xl:ml-64 mr-0 xl:mr-96 pb-16 md:pb-0">
+      <main className="ml-0 md:ml-16 xl:ml-64 mr-0 xl:mr-96 pb-16 md:pb-0 h-full overflow-y-auto overflow-x-hidden">
           {children}
         </main>
         <div className="hidden xl:block">
@@ -307,91 +308,132 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Mobile Mode Toggle - fixed bottom-right */}
         <button
           onClick={toggleMode}
-          className={`md:hidden fixed bottom-[4.5rem] right-4 z-50 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-colors ${
+          className={`md:hidden fixed bottom-[5.5rem] right-4 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-colors ${
             isShadowMode
               ? "bg-card text-primary border border-primary/40"
               : "bg-card text-amber-500 border border-amber-500/40"
           }`}
         >
-          {isShadowMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          {isShadowMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
         </button>
+
+        {/* Mobile Identity Selector - floating above nav bar in shadow mode */}
+        {isShadowMode && isAuthenticated && (
+          <div className="md:hidden fixed bottom-[5rem] left-1/2 -translate-x-1/2 z-50">
+            {!isShadowUnlocked ? (
+              /* Not unlocked - show sign prompt */
+              <button
+                onClick={async () => {
+                  try {
+                    const phantom = (window as any).phantom?.solana || (window as any).solana;
+                    if (!phantom) return;
+                    let walletAddress = phantom.publicKey?.toString();
+                    if (!walletAddress) {
+                      const { publicKey } = await phantom.connect();
+                      walletAddress = publicKey.toString();
+                    }
+                    await unlockShadowWallets(walletAddress, async (message: Uint8Array) => {
+                      const { signature } = await phantom.signMessage(message);
+                      return signature;
+                    });
+                  } catch (error) {
+                    console.error("Failed to unlock:", error);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shadow-lg bg-card text-yellow-500 border border-yellow-500/40 backdrop-blur-sm"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>sign to unlock</span>
+              </button>
+            ) : shadowWallets.length === 0 ? (
+              /* Unlocked but no wallets - show generate */
+              <button
+                onClick={async () => { await generateNewWallet(); }}
+                disabled={shadowLoading}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shadow-lg bg-card text-primary border border-primary/40 backdrop-blur-sm disabled:opacity-50"
+              >
+                {shadowLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                <span>generate identity</span>
+              </button>
+            ) : selectedWallet ? (
+              /* Has wallets - show selector dropdown */
+              <>
+                <button
+                  onClick={() => setIsIdentityOpen(!isIdentityOpen)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shadow-lg ${
+                    (() => {
+                      const sp = premiumWallets.get(selectedWallet.publicKey);
+                      return sp?.isPremium
+                        ? "bg-pink-500/20 text-pink-500 border border-pink-500/40 backdrop-blur-sm"
+                        : "bg-card text-primary border border-primary/40 backdrop-blur-sm";
+                    })()
+                  }`}
+                >
+                  {(() => {
+                    const sp = premiumWallets.get(selectedWallet.publicKey);
+                    return sp?.isPremium ? <Crown className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />;
+                  })()}
+                  <span className="max-w-[100px] truncate">{selectedWallet.name}</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${isIdentityOpen ? "rotate-180" : ""}`} />
+                </button>
+                {isIdentityOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsIdentityOpen(false)} />
+                    <div className="absolute bottom-full mb-2 left-0 w-52 bg-card border border-border rounded-xl shadow-xl py-1.5 max-h-60 overflow-y-auto z-50">
+                      {shadowWallets.map((wallet, index) => {
+                        const wp = premiumWallets.get(wallet.publicKey);
+                        const isPrem = wp?.isPremium || false;
+                        return (
+                          <button
+                            key={wallet.publicKey}
+                            onClick={() => { selectWallet(index); setIsIdentityOpen(false); }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors ${
+                              selectedWalletIndex === index
+                                ? isPrem ? "bg-pink-500/20 text-pink-500" : "bg-primary/20 text-primary"
+                                : isPrem ? "text-pink-500 hover:bg-pink-500/10" : "text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {isPrem && <Crown className="w-3.5 h-3.5 text-pink-500" />}
+                              <span className="truncate">{wallet.name}</span>
+                            </div>
+                            {selectedWalletIndex === index && <Check className="w-4 h-4" />}
+                          </button>
+                        );
+                      })}
+                      <div className="border-t border-border mt-1 pt-1">
+                        <button
+                          onClick={async () => { await generateNewWallet(); setIsIdentityOpen(false); }}
+                          disabled={shadowLoading}
+                          className="w-full flex items-center gap-2 px-3.5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        >
+                          {shadowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                          <span>generate new</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* Mobile Bottom Navigation Bar */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border safe-area-bottom">
-          <div className="grid grid-cols-5 h-14">
-            <a href="/" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
-              <Home className="w-5 h-5" />
+          <div className="grid grid-cols-5 h-16">
+            <a href="/" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+              <Home className="w-6 h-6" />
               <span className="text-[10px]">home</span>
             </a>
-            <button onClick={() => setIsSearchOpen(true)} className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
-              <Search className="w-5 h-5" />
+            <button onClick={() => setIsSearchOpen(true)} className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+              <Search className="w-6 h-6" />
               <span className="text-[10px]">explore</span>
             </button>
             <div className="relative flex items-center justify-center">
-              {/* Mobile identity selector - above post button */}
-              {isShadowMode && isShadowUnlocked && shadowWallets.length > 0 && selectedWallet && (
-                <>
-                  <button
-                    onClick={() => setIsIdentityOpen(!isIdentityOpen)}
-                    className={`absolute -top-8 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap shadow-lg ${
-                      (() => {
-                        const sp = premiumWallets.get(selectedWallet.publicKey);
-                        return sp?.isPremium
-                          ? "bg-pink-500/20 text-pink-500 border border-pink-500/40"
-                          : "bg-card text-primary border border-primary/40";
-                      })()
-                    }`}
-                  >
-                    {(() => {
-                      const sp = premiumWallets.get(selectedWallet.publicKey);
-                      return sp?.isPremium ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />;
-                    })()}
-                    <span className="max-w-[90px] truncate">{selectedWallet.name}</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isIdentityOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {isIdentityOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsIdentityOpen(false)} />
-                      <div className="absolute bottom-full mb-8 left-1/2 -translate-x-1/2 w-48 bg-card border border-border rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto z-50">
-                        {shadowWallets.map((wallet, index) => {
-                          const wp = premiumWallets.get(wallet.publicKey);
-                          const isPrem = wp?.isPremium || false;
-                          return (
-                            <button
-                              key={wallet.publicKey}
-                              onClick={() => { selectWallet(index); setIsIdentityOpen(false); }}
-                              className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors ${
-                                selectedWalletIndex === index
-                                  ? isPrem ? "bg-pink-500/20 text-pink-500" : "bg-primary/20 text-primary"
-                                  : isPrem ? "text-pink-500 hover:bg-pink-500/10" : "text-foreground hover:bg-muted"
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                {isPrem && <Crown className="w-3 h-3 text-pink-500" />}
-                                <span className="truncate">{wallet.name}</span>
-                              </div>
-                              {selectedWalletIndex === index && <Check className="w-3.5 h-3.5" />}
-                            </button>
-                          );
-                        })}
-                        <div className="border-t border-border mt-1 pt-1">
-                          <button
-                            onClick={async () => { await generateNewWallet(); setIsIdentityOpen(false); }}
-                            disabled={shadowLoading}
-                            className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-                          >
-                            {shadowLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                            <span>generate new</span>
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
               <button
                 onClick={isAuthenticated ? () => setIsPostModalOpen(true) : () => setShowMobileWalletMenu(true)}
-                className={`flex items-center justify-center w-10 h-10 rounded-full ${isAuthenticated ? "bg-primary text-primary-foreground" : "bg-primary/80 text-primary-foreground animate-pulse"}`}
+                className={`flex items-center justify-center w-12 h-12 rounded-full ${isAuthenticated ? "bg-primary text-primary-foreground" : "bg-primary/80 text-primary-foreground animate-pulse"}`}
               >
                 {isMobileConnecting ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -403,24 +445,24 @@ export function AppLayout({ children }: AppLayoutProps) {
               </button>
             </div>
             {isShadowMode ? (
-              <a href="/messages" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
-                <Mail className="w-5 h-5" />
+              <a href="/messages" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+                <Mail className="w-6 h-6" />
                 <span className="text-[10px]">messages</span>
               </a>
             ) : (
-              <a href="/notifications" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
-                <Bell className="w-5 h-5" />
+              <a href="/notifications" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+                <Bell className="w-6 h-6" />
                 <span className="text-[10px]">notifs</span>
               </a>
             )}
             {isAuthenticated ? (
-              <a href="/profile" className="flex flex-col items-center justify-center gap-0.5 text-foreground active:text-primary">
-                <User className="w-5 h-5" />
+              <a href="/profile" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+                <User className="w-6 h-6" />
                 <span className="text-[10px]">profile</span>
               </a>
             ) : (
-              <button onClick={() => setShowMobileWalletMenu(true)} className="flex flex-col items-center justify-center gap-0.5 text-muted-foreground active:text-primary">
-                <User className="w-5 h-5" />
+              <button onClick={() => setShowMobileWalletMenu(true)} className="flex flex-col items-center justify-center gap-1 text-muted-foreground active:text-primary">
+                <User className="w-6 h-6" />
                 <span className="text-[10px]">profile</span>
               </button>
             )}

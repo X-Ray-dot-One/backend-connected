@@ -201,8 +201,8 @@ class ProfileController {
             return false;
         }
 
-        // Validate file size (max 2MB for profile, 5MB for banner)
-        $maxSize = ($type === 'banner') ? 5 * 1024 * 1024 : 2 * 1024 * 1024;
+        // Validate file size (max 7MB for profile, 7MB for banner)
+        $maxSize = 7 * 1024 * 1024;
         if ($file['size'] > $maxSize) {
             return false;
         }

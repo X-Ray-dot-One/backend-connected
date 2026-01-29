@@ -282,6 +282,9 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
   const [mentionStartIndex, setMentionStartIndex] = useState<number>(0);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Shadow context
   const {
@@ -591,6 +594,29 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
     }, 0);
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be less than 5MB", "error");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select an image file", "error");
+      return;
+    }
+    setSelectedImage(file);
+    const url = URL.createObjectURL(file);
+    setImagePreview(url);
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -736,7 +762,9 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
       } else {
         // Public mode: use API
         setPostingStep("publishing...");
-        const response = await api.createPost(content);
+        const response = await api.createPost(content, {
+          image: selectedImage || undefined,
+        });
 
         if (response.success) {
           showToast("Post published!");
@@ -753,6 +781,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
       setManualPositionInput("");
       setBidPreview(null);
       setBidRange({ min: 0.007, max: 1 });
+      removeImage();
       onClose();
       onPostSuccess?.();
     } catch (err) {
@@ -902,12 +931,12 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, y: 100, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 100, scale: 0.95 }}
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             style={{ backgroundColor: "var(--card)" }}
-            className={`fixed inset-0 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 w-full md:rounded-2xl border-0 md:border border-border shadow-2xl z-50 flex flex-col md:flex-row md:max-h-[90vh] ${
+            className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border shadow-2xl z-50 flex flex-col md:flex-row max-h-[85vh] md:max-h-[90vh] ${
               isShadowMode && isTargetLocked ? "md:max-w-4xl" : "md:max-w-lg"
             }`}
           >
@@ -1441,6 +1470,19 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                     )}
                   </AnimatePresence>
 
+                  {/* Image preview */}
+                  {imagePreview && (
+                    <div className="relative mt-2 rounded-xl overflow-hidden border border-border">
+                      <img src={imagePreview} alt="Preview" className="w-full max-h-64 object-cover" />
+                      <button
+                        onClick={removeImage}
+                        className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Divider with animation */}
                   <motion.div
                     className="h-px bg-border mt-2"
@@ -1455,9 +1497,21 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                     {/* Action buttons - only in public mode */}
                     <div className="flex items-center gap-1">
                       {!isShadowMode && (
-                        <button className="p-2 rounded-full text-primary hover:bg-primary/10 transition-colors">
-                          <Image className="w-5 h-5" />
-                        </button>
+                        <>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-2 rounded-full text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <Image className="w-5 h-5" />
+                          </button>
+                        </>
                       )}
                     </div>
 

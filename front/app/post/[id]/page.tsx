@@ -266,6 +266,11 @@ function PostDetailContent() {
           <p className="text-xl text-foreground leading-relaxed">
             {renderContentWithMentions(post.content)}
           </p>
+          {post.image && (
+            <div className="mt-3 rounded-xl overflow-hidden border border-border">
+              <img src={getImageUrl(post.image, "")} alt="" className="w-full max-h-[500px] object-cover" />
+            </div>
+          )}
         </div>
 
         {/* Time */}
@@ -318,19 +323,19 @@ function PostDetailContent() {
               alt="You"
               className="w-10 h-10 rounded-full object-cover"
             />
-            <div className="flex-1 flex gap-2">
+            <div className="flex-1 flex gap-2 min-w-0">
               <input
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Post your reply..."
-                className="flex-1 bg-muted rounded-full px-4 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1 min-w-0 bg-muted rounded-full px-4 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 disabled={isSubmitting}
               />
               <button
                 type="submit"
                 disabled={!newComment.trim() || isSubmitting}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="flex-shrink-0 px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

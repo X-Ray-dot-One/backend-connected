@@ -17,6 +17,7 @@ export function getImageUrl(path: string | null | undefined, fallback: string): 
   if (path.startsWith('http')) return path;
   // If it's a relative path from API (uploaded files), prepend the API base
   if (path.startsWith('public/')) return `${API_BASE}/${path}`;
+  if (path.startsWith('uploads/')) return `${API_BASE}/public/${path}`;
   return path;
 }
 
