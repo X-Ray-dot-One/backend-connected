@@ -936,7 +936,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             exit={{ opacity: 0, y: 50 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             style={{ backgroundColor: "var(--card)" }}
-            className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border shadow-2xl z-50 flex flex-col md:flex-row max-h-[85vh] md:max-h-[90vh] ${
+            className={`fixed left-1/2 -translate-x-1/2 top-4 md:top-1/2 md:-translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border shadow-2xl z-50 flex flex-col md:flex-row max-h-[85vh] md:max-h-[90vh] ${
               isShadowMode && isTargetLocked ? "md:max-w-4xl" : "md:max-w-lg"
             }`}
           >

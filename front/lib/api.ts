@@ -233,7 +233,13 @@ export async function createPost(content: string, options?: {
       credentials: 'include',
       body: formData,
     });
-    const data = await response.json();
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Server error: ${text.substring(0, 200)}`);
+    }
     if (!data.success && data.error) throw new Error(data.error);
     return data as { success: boolean; post_id: number };
   }
