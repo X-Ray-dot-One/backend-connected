@@ -110,3 +110,9 @@ body {
   animation: bracket-pulse 2s ease-in-out infinite;
 }
 
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(200%); }
+  100% { transform: translateX(-100%); }
+}
+

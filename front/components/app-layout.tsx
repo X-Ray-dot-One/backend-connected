@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Sun, Moon, Wallet, EyeOff, Lock } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -66,6 +67,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     isLoading: shadowLoading,
     unlockShadowWallets,
   } = useShadow();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -91,6 +95,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     const timeout = setTimeout(checkWallets, 500);
     return () => clearTimeout(timeout);
   }, []);
+
+  // Reset navigating state when pathname changes
+  useEffect(() => {
+    setIsNavigating(false);
+  }, [pathname]);
+
+  const navigateTo = (href: string) => {
+    if (pathname === href) return;
+    setIsNavigating(true);
+    router.push(href);
+  };
 
   const MOBILE_WALLETS = [
     { id: "phantom", name: "Phantom", icon: "/phantom logo.png", downloadUrl: "https://phantom.app/download" },
@@ -419,13 +434,20 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         )}
 
+        {/* Navigation loading bar */}
+        {isNavigating && (
+          <div className="md:hidden fixed top-0 left-0 right-0 z-[70] h-0.5 bg-primary/20">
+            <div className="h-full bg-primary animate-[loading_1.5s_ease-in-out_infinite] w-1/3" />
+          </div>
+        )}
+
         {/* Mobile Bottom Navigation Bar */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border safe-area-bottom">
           <div className="grid grid-cols-5 h-16">
-            <a href="/" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+            <button onClick={() => navigateTo("/")} className={`flex flex-col items-center justify-center gap-1 ${pathname === "/" ? "text-primary" : "text-foreground"}`}>
               <Home className="w-6 h-6" />
               <span className="text-[10px]">home</span>
-            </a>
+            </button>
             <button onClick={() => setIsSearchOpen(true)} className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
               <Search className="w-6 h-6" />
               <span className="text-[10px]">explore</span>
@@ -445,21 +467,21 @@ export function AppLayout({ children }: AppLayoutProps) {
               </button>
             </div>
             {isShadowMode ? (
-              <a href="/messages" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+              <button onClick={() => navigateTo("/messages")} className={`flex flex-col items-center justify-center gap-1 ${pathname === "/messages" ? "text-primary" : "text-foreground"}`}>
                 <Mail className="w-6 h-6" />
                 <span className="text-[10px]">messages</span>
-              </a>
+              </button>
             ) : (
-              <a href="/notifications" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+              <button onClick={() => navigateTo("/notifications")} className={`flex flex-col items-center justify-center gap-1 ${pathname === "/notifications" ? "text-primary" : "text-foreground"}`}>
                 <Bell className="w-6 h-6" />
                 <span className="text-[10px]">notifs</span>
-              </a>
+              </button>
             )}
             {isAuthenticated ? (
-              <a href="/profile" className="flex flex-col items-center justify-center gap-1 text-foreground active:text-primary">
+              <button onClick={() => navigateTo("/profile")} className={`flex flex-col items-center justify-center gap-1 ${pathname === "/profile" ? "text-primary" : "text-foreground"}`}>
                 <User className="w-6 h-6" />
                 <span className="text-[10px]">profile</span>
-              </a>
+              </button>
             ) : (
               <button onClick={() => setShowMobileWalletMenu(true)} className="flex flex-col items-center justify-center gap-1 text-muted-foreground active:text-primary">
                 <User className="w-6 h-6" />
