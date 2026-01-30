@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Image, EyeOff, Target, Zap, Lock, Check, HelpCircle, ChevronDown, Plus, Loader2, Key, AlertCircle, Eye, ArrowDownToLine, Wallet, Crown } from "lucide-react";
+import { X, Image, EyeOff, Target, Zap, Lock, Check, HelpCircle, ChevronDown, Plus, Loader2, Key, AlertCircle, Eye, ArrowDownToLine, Wallet, Crown, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as api from "@/lib/api";
 import { getImageUrl } from "@/lib/utils";
@@ -315,6 +315,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
   const [bidRange, setBidRange] = useState<{ min: number; max: number }>({ min: 0.007, max: 1 });
   const [isLockingTarget, setIsLockingTarget] = useState(false);
   const [targetBids, setTargetBids] = useState<bigint[]>([]); // Store existing bids for local position calculation
+  const [lockedTargetInfo, setLockedTargetInfo] = useState<{ name: string; avatar: string; followers?: number } | null>(null);
 
   // Fund wallet states
   const [showFundModal, setShowFundModal] = useState(false);
@@ -777,6 +778,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
       setTargetQuery("");
       setBoostAmount(0.007);
       setIsTargetLocked(false);
+      setLockedTargetInfo(null);
       setManualBoostInput("");
       setManualPositionInput("");
       setBidPreview(null);
@@ -816,6 +818,11 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
           setIsLockingTarget(false);
           return;
         }
+        setLockedTargetInfo({
+          name: xProfile.name || targetUser,
+          avatar: xProfile.profilePicUrl || "",
+          followers: xProfile.followersCount,
+        });
       } else {
         // Verify X-RAY profile exists
         try {
@@ -826,6 +833,11 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             setIsLockingTarget(false);
             return;
           }
+          setLockedTargetInfo({
+            name: response.user?.username || targetUser,
+            avatar: response.user?.profile_picture ? getImageUrl(response.user.profile_picture, "") : "",
+            followers: response.stats?.followers,
+          });
         } catch {
           // User not found throws an error
           setTargetError(`@${targetUser} not found on X-RAY`);
@@ -849,6 +861,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
     setBidRange({ min: 0.007, max: 1 });
     setTargetBids([]);
     setBidPreview(null);
+    setLockedTargetInfo(null);
   };
 
   const handleManualBoostChange = (value: string) => {
@@ -936,12 +949,12 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             exit={{ opacity: 0, y: 50 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             style={{ backgroundColor: "var(--card)" }}
-            className={`fixed left-1/2 -translate-x-1/2 top-4 md:top-1/2 md:-translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border shadow-2xl z-50 flex flex-col md:flex-row max-h-[85vh] md:max-h-[90vh] ${
+            className={`fixed left-1/2 -translate-x-1/2 top-4 md:top-1/2 md:-translate-y-1/2 w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border shadow-2xl z-50 flex flex-col md:flex-row max-h-[85vh] md:max-h-[90vh] overflow-hidden ${
               isShadowMode && isTargetLocked ? "md:max-w-4xl" : "md:max-w-lg"
             }`}
           >
             {/* Main form section */}
-            <div className={`flex-1 overflow-y-auto ${isShadowMode && isTargetLocked ? "md:border-r border-border" : ""}`}>
+            <div className={`flex-1 overflow-y-auto overflow-x-hidden ${isShadowMode && isTargetLocked ? "md:border-r border-border" : ""}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <button
@@ -981,10 +994,10 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <EyeOff className="w-4 h-4 text-primary" />
-                    <span className="text-sm text-muted-foreground">post as</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <EyeOff className="w-4 h-4 text-primary flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground flex-shrink-0">post as</span>
 
                     {/* Identity Dropdown - Real shadow wallets */}
                     <div className="relative">
@@ -1001,7 +1014,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                             }`}
                           >
                             {isSelectedPremium && <Crown className="w-3.5 h-3.5 text-pink-500" />}
-                            <span className={`text-sm font-medium ${isSelectedPremium ? "text-pink-500" : "text-primary"}`}>
+                            <span className={`text-sm font-medium truncate max-w-[100px] ${isSelectedPremium ? "text-pink-500" : "text-primary"}`}>
                               {selectedWallet?.name || "No wallet"}
                             </span>
                             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSelectedPremium ? "text-pink-500" : "text-primary"} ${isIdentityDropdownOpen ? "rotate-180" : ""}`} />
@@ -1094,148 +1107,152 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             {/* Shadow Mode Target Selector */}
             {isShadowMode && (
               <div className="px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2 mb-3">
-                  <Target className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-muted-foreground">target user</span>
-                </div>
-
-                {/* Platform Toggle */}
-                <div className="flex items-center gap-2 mb-3">
-                  <button
-                    onClick={() => !isTargetLocked && setTargetPlatform("xray")}
-                    disabled={isTargetLocked}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                      targetPlatform === "xray"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    } ${isTargetLocked ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <EyeOff className="w-3.5 h-3.5" />
-                    x-ray
-                  </button>
-                  <button
-                    onClick={() => !isTargetLocked && setTargetPlatform("twitter")}
-                    disabled={isTargetLocked}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                      targetPlatform === "twitter"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    } ${isTargetLocked ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <XLogo className="w-3.5 h-3.5" />
-                    X
-                  </button>
-                </div>
-
-                {/* Target User Input with Lock Button */}
-                <div className="relative flex gap-2">
-                  <div className="flex-1 relative">
-                    <div className={`flex items-center rounded-lg bg-muted ${
-                      isTargetLocked ? "opacity-70" : ""
-                    } ${targetError ? "ring-2 ring-red-500" : "focus-within:ring-2 focus-within:ring-primary/50"}`}>
-                      <span className="pl-3 text-sm text-primary font-medium">@</span>
-                      <input
-                        type="text"
-                        value={targetQuery}
-                        onChange={(e) => {
-                          if (!isTargetLocked) {
-                            const value = e.target.value;
-                            // Check if user typed @ at the beginning
-                            if (value.startsWith("@")) {
-                              setTargetError("Don't add @ - it's already included");
-                              setTargetQuery(value.slice(1)); // Remove the @
-                              setTargetUser(value.slice(1));
-                            } else if (value.includes("@")) {
-                              setTargetError("Username cannot contain @");
-                            } else {
-                              setTargetError(null);
-                              setTargetQuery(value);
-                              setTargetUser(value);
-                            }
-                            setShowTargetDropdown(true);
-                          }
-                        }}
-                        onFocus={() => !isTargetLocked && setShowTargetDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowTargetDropdown(false), 150)}
-                        placeholder={targetPlatform === "xray" ? "username" : "twitter_handle"}
-                        disabled={isTargetLocked}
-                        className="flex-1 px-1 py-2 bg-transparent text-foreground placeholder:text-muted-foreground text-sm focus:outline-none"
-                      />
+                {isTargetLocked && lockedTargetInfo ? (
+                  /* Locked state - show profile card */
+                  <div className="flex items-center gap-3">
+                    {lockedTargetInfo.avatar ? (
+                      <img src={lockedTargetInfo.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                        <EyeOff className="w-5 h-5 text-primary" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{lockedTargetInfo.name}</p>
+                      <p className="text-xs text-muted-foreground">@{targetUser} · {targetPlatform === "twitter" ? "X" : "x-ray"}{lockedTargetInfo.followers !== undefined ? ` · ${lockedTargetInfo.followers.toLocaleString()} followers` : ""}</p>
                     </div>
+                    <button
+                      onClick={handleUnlockTarget}
+                      className="p-1.5 rounded-full hover:bg-red-500/10 transition-colors flex-shrink-0"
+                      title="Change target"
+                    >
+                      <X className="w-4 h-4 text-red-500" />
+                    </button>
+                  </div>
+                ) : (
+                  /* Unlocked state - show search UI */
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Target className="w-4 h-4 text-primary" />
+                      <span className="text-sm text-muted-foreground">who are you talking about?</span>
+                    </div>
+
+                    {/* Platform Toggle */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <button
+                        onClick={() => setTargetPlatform("xray")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                          targetPlatform === "xray"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        <EyeOff className="w-3.5 h-3.5" />
+                        x-ray
+                      </button>
+                      <button
+                        onClick={() => setTargetPlatform("twitter")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                          targetPlatform === "twitter"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        <XLogo className="w-3.5 h-3.5" />
+                        X
+                      </button>
+                    </div>
+
+                    {/* Target User Input with Lock Button */}
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <div className={`flex items-center rounded-lg bg-muted ${targetError ? "ring-2 ring-red-500" : "focus-within:ring-2 focus-within:ring-primary/50"}`}>
+                          <span className="pl-3 text-sm text-primary font-medium">@</span>
+                          <input
+                            type="text"
+                            value={targetQuery}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value.startsWith("@")) {
+                                setTargetError("Don't add @ - it's already included");
+                                setTargetQuery(value.slice(1));
+                                setTargetUser(value.slice(1));
+                              } else if (value.includes("@")) {
+                                setTargetError("Username cannot contain @");
+                              } else {
+                                setTargetError(null);
+                                setTargetQuery(value);
+                                setTargetUser(value);
+                              }
+                              setShowTargetDropdown(true);
+                            }}
+                            onFocus={() => setShowTargetDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowTargetDropdown(false), 150)}
+                            placeholder={targetPlatform === "xray" ? "username" : "twitter_handle"}
+                            className="flex-1 px-1 py-2 bg-transparent text-foreground placeholder:text-muted-foreground text-sm focus:outline-none"
+                          />
+                        </div>
+                        {/* Target User Dropdown (X-RAY only) */}
+                        {showTargetDropdown && targetPlatform === "xray" && filteredTargetUsers.length > 0 && (
+                          <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                            {isSearching && (
+                              <div className="flex items-center justify-center py-3">
+                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                              </div>
+                            )}
+                            {!isSearching && filteredTargetUsers.map((user) => (
+                              <button
+                                key={user.id}
+                                onClick={() => {
+                                  setTargetUser(user.username);
+                                  setTargetQuery(user.username);
+                                  setShowTargetDropdown(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted transition-colors"
+                              >
+                                <img
+                                  src={getImageUrl(user.profile_picture, `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`)}
+                                  alt={user.username}
+                                  className="w-8 h-8 rounded-full object-cover"
+                                />
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">@{user.username}</p>
+                                  {user.bio && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{user.bio}</p>}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lock Button */}
+                      <button
+                        onClick={handleLockTarget}
+                        disabled={!targetUser.trim() || isLockingTarget}
+                        className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                          targetUser.trim() && !isLockingTarget
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "bg-muted text-muted-foreground cursor-not-allowed"
+                        }`}
+                      >
+                        {isLockingTarget ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                        <span className="text-sm">{isLockingTarget ? "..." : "lock"}</span>
+                      </button>
+                    </div>
+
                     {/* Error message */}
                     {targetError && (
-                      <p className="absolute left-0 top-full mt-1 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
+                      <p className="mt-2 text-xs text-red-500 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
                         {targetError}
                       </p>
                     )}
-
-                    {/* Target User Dropdown (X-RAY only) */}
-                    {showTargetDropdown && !isTargetLocked && targetPlatform === "xray" && filteredTargetUsers.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto">
-                        {isSearching && (
-                          <div className="flex items-center justify-center py-3">
-                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                          </div>
-                        )}
-                        {!isSearching && filteredTargetUsers.map((user) => (
-                          <button
-                            key={user.id}
-                            onClick={() => {
-                              setTargetUser(user.username);
-                              setTargetQuery(user.username);
-                              setShowTargetDropdown(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted transition-colors"
-                          >
-                            <img
-                              src={getImageUrl(user.profile_picture, `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`)}
-                              alt={user.username}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                            <div>
-                              <p className="text-sm font-medium text-foreground">@{user.username}</p>
-                              {user.bio && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{user.bio}</p>}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Lock/Unlock Button */}
-                  {isTargetLocked ? (
-                    <button
-                      onClick={handleUnlockTarget}
-                      className="px-3 py-2 rounded-lg bg-green-500/20 text-green-600 hover:bg-green-500/30 transition-colors flex items-center gap-1.5"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span className="text-sm">locked</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleLockTarget}
-                      disabled={!targetUser.trim() || isLockingTarget}
-                      className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 ${
-                        targetUser.trim() && !isLockingTarget
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                          : "bg-muted text-muted-foreground cursor-not-allowed"
-                      }`}
-                    >
-                      {isLockingTarget ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-sm">checking...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-4 h-4" />
-                          <span className="text-sm">lock</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
+                  </>
+                )}
 
                 {/* SOL Boost Slider - Only shown after target is locked */}
                 <AnimatePresence>
@@ -1353,8 +1370,8 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
               </div>
             )}
 
-            {/* Content */}
-            <div className="p-4">
+            {/* Content - hidden on mobile until target is locked in shadow mode */}
+            <div className={`p-4 ${isShadowMode && !isTargetLocked ? "hidden md:block" : ""}`}>
               <div className="flex gap-3">
                 {/* Avatar - only in public mode */}
                 {!isShadowMode && (
@@ -1367,9 +1384,9 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
 
                 {/* Input area */}
                 <div className="flex-1 relative">
-                  {/* Lock target message overlay */}
+                  {/* Lock target message overlay - hidden on mobile */}
                   {isShadowMode && !isTargetLocked && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 bg-background/50 rounded-lg border-2 border-dashed border-primary/30">
+                    <div className="hidden md:flex absolute inset-0 items-center justify-center z-20 bg-background/50 rounded-lg border-2 border-dashed border-primary/30">
                       <div className="text-center">
                         <Lock className="w-8 h-8 text-primary/50 mx-auto mb-2" />
                         <p className="text-sm text-muted-foreground">Lock a target to start writing</p>
@@ -1429,7 +1446,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="absolute left-0 w-[350px] border border-border rounded-xl shadow-2xl z-[100] max-h-[300px] overflow-y-auto"
+                        className="absolute left-0 w-[calc(100vw-4rem)] max-w-[350px] border border-border rounded-xl shadow-2xl z-[100] max-h-[300px] overflow-y-auto"
                         style={{
                           backgroundColor: "var(--card)",
                           top: "calc(100% + 8px)",
