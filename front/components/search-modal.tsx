@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Search, X, Loader2, EyeOff, Zap, FileText, Clock } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { searchUsers, searchShadowWallets, type ShadowWalletSearchResult } from "@/lib/api";
+import { getImageUrl, getDefaultAvatar } from "@/lib/utils";
 import { getShadowWalletStats, type ShadowWalletStats } from "@/lib/shadow/topPosts";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
@@ -238,9 +239,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                   onClick={onClose}
                 >
                   <img
-                    src={user.profile_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
+                    src={getImageUrl(user.profile_picture, getDefaultAvatar(user.username))}
                     alt={user.username}
-                    className="w-10 h-10 rounded-full"
+                    className="w-10 h-10 rounded-full object-cover"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground">{user.username}</p>

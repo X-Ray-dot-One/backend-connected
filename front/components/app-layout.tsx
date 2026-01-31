@@ -2,7 +2,7 @@
 
 import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Sun, Moon, Wallet, EyeOff, Lock } from "lucide-react";
+import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Eye, EyeOff, Wallet, Lock } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useShadow } from "@/contexts/shadow-context";
@@ -346,13 +346,14 @@ export function AppLayout({ children }: AppLayoutProps) {
         {pathname !== "/messages" && (
         <button
           onClick={toggleMode}
-          className={`md:hidden fixed bottom-[5.5rem] right-4 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-colors ${
+          className={`md:hidden fixed bottom-[5.5rem] right-4 z-50 rounded-full flex items-center gap-1.5 shadow-lg transition-colors px-3 py-2.5 ${
             isShadowMode
               ? "bg-card text-primary border border-primary/40"
               : "bg-card text-amber-500 border border-amber-500/40"
           }`}
         >
-          {isShadowMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+          {isShadowMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          <span className="text-xs font-semibold">{isShadowMode ? "shadow" : "public"}</span>
         </button>
         )}
 
@@ -498,7 +499,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             ) : (
               <button className="flex flex-col items-center justify-center gap-1 text-muted-foreground/40 cursor-not-allowed">
                 <Bell className="w-6 h-6" />
-                <span className="text-[10px]">alpha</span>
+                <span className="text-[10px]">soon</span>
               </button>
             )}
             {isAuthenticated ? (

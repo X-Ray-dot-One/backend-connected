@@ -9,8 +9,8 @@ import {
   User,
   Wallet,
   LogOut,
-  Sun,
-  Moon,
+  Eye,
+  EyeOff,
   HelpCircle,
   PenSquare,
   Loader2,
@@ -209,7 +209,7 @@ export function LeftSidebar() {
           onClick={toggleMode}
           className="flex items-center gap-2 p-1 rounded-full bg-muted/50 transition-colors"
         >
-          {/* Sun icon */}
+          {/* Public icon */}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
               !isShadowMode
@@ -217,10 +217,10 @@ export function LeftSidebar() {
                 : "text-muted-foreground"
             }`}
           >
-            <Sun className="w-4 h-4" />
+            <Eye className="w-4 h-4" />
           </div>
 
-          {/* Moon icon */}
+          {/* Shadow icon */}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
               isShadowMode
@@ -228,12 +228,12 @@ export function LeftSidebar() {
                 : "text-muted-foreground"
             }`}
           >
-            <Moon className="w-4 h-4" />
+            <EyeOff className="w-4 h-4" />
           </div>
         </button>
 
         <p className={`text-xs text-muted-foreground mt-2 text-center hidden xl:block`}>
-          {isShadowMode ? "// encrypted" : "// wallet visible"}
+          {isShadowMode ? "shadow mode" : "public mode"}
         </p>
       </div>
 
