@@ -101,9 +101,12 @@ export function RightPanel() {
 
       // Fetch NDD list
       setIsLoadingNdd(true);
-      getPremiumNddList(10)
+      getPremiumNddList(100)
         .then((res) => {
-          setNddList(res.ndds || []);
+          const all = res.ndds || [];
+          // Shuffle and pick 3 random NDDs
+          const shuffled = [...all].sort(() => Math.random() - 0.5);
+          setNddList(shuffled.slice(0, 3));
         })
         .catch((error) => {
           console.error("Failed to fetch NDD list:", error);
@@ -264,15 +267,15 @@ export function RightPanel() {
       {/* Footer */}
       <div className="text-xs text-muted-foreground px-2">
         <div className="flex flex-wrap gap-2">
-          <a href="/terms" className="hover:text-primary transition-colors">terms</a>
+          <span>terms</span>
           <span>·</span>
-          <a href="/privacy" className="hover:text-primary transition-colors">privacy</a>
+          <span>privacy</span>
           <span>·</span>
-          <a href="/about" className="hover:text-primary transition-colors">about</a>
+          <a href="https://x-ray.one" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">about</a>
           <span>·</span>
-          <a href="/docs" className="hover:text-primary transition-colors">docs</a>
+          <a href="https://ray-paper.x-ray.one" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">docs</a>
         </div>
-        <p className="mt-2">© 2025 X-RAY</p>
+        <p className="mt-2">© 2026 X-RAY</p>
       </div>
 
       {/* NDD Purchase Modal */}

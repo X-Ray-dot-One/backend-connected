@@ -153,6 +153,6 @@ $isShadowMode = isset($_SESSION['shadow_mode']) && $_SESSION['shadow_mode'];
             <span>·</span>
             <a href="#">docs</a>
         </div>
-        <p class="panel-footer-copyright">© 2025 X-RAY</p>
+        <p class="panel-footer-copyright">© 2026 X-RAY</p>
     </div>
 </aside>

@@ -182,10 +182,14 @@ premium_wallets (
 - `app/user/[username]/page.tsx` - User profile with follow/unfollow + shadow tab
 - `app/user/x/[username]/page.tsx` - X/Twitter profile with shadow posts
 - `app/profile/page.tsx` - Own profile editing + shadow wallet management
+- `app/shadow/[name]/page.tsx` - Shadow wallet profile page
+- `app/marketplace/page.tsx` - NDD marketplace (browse & buy premium identities)
+- `app/messages/page.tsx` - Encrypted private messaging
+- `app/how-it-works/page.tsx` - How it works explainer page
+- `app/notifications/page.tsx` - Notifications page
+- `right-panel.tsx` - Top posts 24h, NDD recommendations (random), footer
+- `ndd-purchase-modal.tsx` - NDD purchase modal with revenue split
 - `toast.tsx` - Toast notifications system
-
-### Mock Data (TODO: connect to API)
-- `right-panel.tsx` - Trending topics (mock), suggested users (TODO: connect)
 
 ## On-Chain Integration (Devnet)
 

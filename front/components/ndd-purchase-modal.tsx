@@ -181,7 +181,7 @@ export function NddPurchaseModal({ isOpen, onClose, ndd, onSuccess }: NddPurchas
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl bg-card border border-border rounded-xl z-[100]"
+            className="fixed inset-x-4 top-4 bottom-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-3xl bg-card border border-border rounded-xl z-[100] overflow-y-auto"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -193,7 +193,7 @@ export function NddPurchaseModal({ isOpen, onClose, ndd, onSuccess }: NddPurchas
               )}
             </div>
 
-            <div className="p-6">
+            <div className="p-4 md:p-6">
               {/* Loading */}
               {step === "loading" && (
                 <div className="flex items-center justify-center py-16">
@@ -216,24 +216,24 @@ export function NddPurchaseModal({ isOpen, onClose, ndd, onSuccess }: NddPurchas
                 </div>
               )}
 
-              {/* Ready - Horizontal Layout */}
+              {/* Ready - Responsive Layout */}
               {step === "ready" && (
-                <div className="flex gap-8">
+                <div className="flex flex-col md:flex-row gap-6 md:gap-8">
                   {/* Left side - Preview + Wallet + Buy */}
                   <div className="flex-1 space-y-6">
                     {/* Fake Post Preview */}
                     <div className="border border-border rounded-xl p-5 bg-background">
-                      <div className="flex gap-4">
-                        <div className="w-16 h-16 rounded-full bg-pink-500/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div className="flex gap-3 md:gap-4">
+                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-pink-500/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                           {displayNdd.pfp ? (
                             <img src={getImageUrl(displayNdd.pfp, "")} alt="" className="w-full h-full object-cover" />
                           ) : (
-                            <EyeOff className="w-8 h-8 text-pink-500" />
+                            <EyeOff className="w-6 h-6 md:w-8 md:h-8 text-pink-500" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0 pt-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-pink-500 text-lg">{displayNdd.name}</span>
+                            <span className="font-bold text-pink-500 text-base md:text-lg">{displayNdd.name}</span>
                             <Crown className="w-4 h-4 text-pink-500" />
                             <span className="text-muted-foreground">· 2m</span>
                           </div>
@@ -342,7 +342,7 @@ export function NddPurchaseModal({ isOpen, onClose, ndd, onSuccess }: NddPurchas
                   </div>
 
                   {/* Right side - Features + Price */}
-                  <div className="w-72 space-y-5">
+                  <div className="md:w-72 space-y-5">
                     {/* Features */}
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">includes</p>

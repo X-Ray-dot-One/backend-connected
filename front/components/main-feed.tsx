@@ -466,7 +466,7 @@ export function MainFeed() {
   // Fetch NDD list for mobile inline recommendations (shadow mode only)
   useEffect(() => {
     if (isShadowMode) {
-      api.getPremiumNddList(6).then(res => {
+      api.getPremiumNddList(100).then(res => {
         setNddList(res.ndds || []);
       }).catch(() => {});
     }
@@ -522,8 +522,8 @@ export function MainFeed() {
 
   return (
     <div className="flex-1 xl:border-r border-border">
-      {/* Title - scrolls away */}
-      <div className="px-4 py-4 border-b border-border">
+      {/* Header - sticky on desktop, scrolls on mobile */}
+      <div className="md:sticky md:top-0 md:z-10 px-4 py-4 border-b border-border bg-background/80 backdrop-blur-sm">
         <h1 className="text-xl font-bold text-primary">
           {isShadowMode ? "// shadow_feed" : "// public_feed"}
         </h1>
@@ -534,8 +534,8 @@ export function MainFeed() {
         </p>
       </div>
 
-      {/* Tabs - sticky */}
-      <div className="sticky top-0 bg-card/80 backdrop-blur-sm border-b border-border z-10">
+      {/* Tabs - always sticky */}
+      <div className="sticky top-0 z-10 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="flex">
           <button
             onClick={() => setActiveTab("for_you")}
@@ -599,8 +599,7 @@ export function MainFeed() {
                 />
                 {/* Mobile NDD recommendation after every 10th post */}
                 {nddList.length > 0 && (index + 1) % 10 === 0 && index < shadowPosts.length - 1 && (() => {
-                  const nddIndex = Math.floor(index / 10) % nddList.length;
-                  const ndd = nddList[nddIndex];
+                  const ndd = nddList[Math.floor(Math.random() * nddList.length)];
                   return (
                     <div className="xl:hidden border-b border-border px-4 py-3 bg-card/50">
                       <div className="flex items-center gap-2 mb-2">
@@ -619,12 +618,20 @@ export function MainFeed() {
                             <p className="text-xs text-muted-foreground">{ndd.cost} SOL</p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => { setSelectedNdd(ndd); setIsPurchaseModalOpen(true); }}
-                          className="px-3 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-full hover:bg-pink-500/90 transition-colors"
-                        >
-                          buy
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedNdd(ndd); setIsPurchaseModalOpen(true); }}
+                            className="px-3 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-full hover:bg-pink-500/90 transition-colors"
+                          >
+                            buy
+                          </button>
+                          <a
+                            href="/marketplace"
+                            className="px-3 py-1.5 text-xs font-medium border border-pink-500/30 text-pink-500 rounded-full hover:bg-pink-500/10 transition-colors"
+                          >
+                            all
+                          </a>
+                        </div>
                       </div>
                     </div>
                   );
