@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/app-layout";
 import { useMode } from "@/contexts/mode-context";
-import { Heart, UserPlus, MessageCircle, AtSign, TrendingDown, EyeOff } from "lucide-react";
+import { Heart, UserPlus, MessageCircle, AtSign, TrendingDown, EyeOff, Bell } from "lucide-react";
 
 interface PublicNotification {
   id: number;
@@ -187,84 +187,34 @@ function getNotificationIcon(type: PublicNotification["type"]) {
 function NotificationsContent() {
   const { isShadowMode } = useMode();
 
+  if (!isShadowMode) {
+    return (
+      <div className="border-x border-border min-h-screen">
+        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3">
+          <h1 className="text-xl font-bold text-foreground">notifications</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <Bell className="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <p className="text-lg font-medium text-foreground">still building</p>
+          <p className="text-sm text-muted-foreground mt-1">notifications are not available in alpha</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border-x border-border min-h-screen">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3">
         <h1 className="text-xl font-bold text-foreground">notifications</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          {isShadowMode ? "// position updates" : "// activity on your posts"}
+          // position updates
         </p>
       </div>
 
       {/* Notifications List */}
       <div className="divide-y divide-border">
-        {!isShadowMode ? (
-          // Public Mode Notifications
-          publicNotifications.map((notif) => (
-            notif.type === "shadow_mention" ? (
-              // Shadow mention notification - purple theme for anonymous
-              <div
-                key={notif.id}
-                className="px-4 py-4 bg-purple-50 hover:bg-purple-100 transition-colors cursor-pointer border-l-4 border-purple-400"
-              >
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                    <EyeOff className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-purple-700">anonymous</span>
-                      <span className="text-purple-500">{notif.content}</span>
-                      <span className="text-xs text-purple-400 ml-auto">{notif.time}</span>
-                    </div>
-                    {notif.postPreview && (
-                      <p className="text-sm text-gray-700 mt-1 truncate">
-                        {notif.postPreview}
-                      </p>
-                    )}
-                    {notif.boost && (
-                      <p className="text-xs text-purple-600 mt-1">
-                        boosted with {notif.boost} SOL
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // Regular notification
-              <div
-                key={notif.id}
-                className="px-4 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                    {getNotificationIcon(notif.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={notif.avatar}
-                        alt={notif.username}
-                        className="w-6 h-6 rounded-full"
-                      />
-                      <span className="font-medium text-foreground">{notif.username}</span>
-                      <span className="text-muted-foreground">{notif.content}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{notif.time}</span>
-                    </div>
-                    {notif.postPreview && (
-                      <p className="text-sm text-muted-foreground mt-1 truncate">
-                        {notif.postPreview}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          ))
-        ) : (
-          // Shadow Mode Notifications - Position updates
-          shadowNotifications.map((notif) => (
+        {shadowNotifications.map((notif) => (
             <div
               key={notif.id}
               className="px-4 py-4 hover:bg-muted/50 transition-colors cursor-pointer"
@@ -289,8 +239,7 @@ function NotificationsContent() {
                 <span className="text-xs text-muted-foreground">{notif.time}</span>
               </div>
             </div>
-          ))
-        )}
+          ))}
       </div>
     </div>
   );

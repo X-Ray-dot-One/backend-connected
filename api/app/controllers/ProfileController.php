@@ -145,6 +145,9 @@ class ProfileController {
         }
 
         // Handle profile picture upload
+        $profilePicturePath = null;
+        $bannerPicturePath = null;
+
         if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
             $profilePicturePath = $this->handleImageUpload($_FILES['profile_picture'], 'profile', $userId);
             if ($profilePicturePath === false) {

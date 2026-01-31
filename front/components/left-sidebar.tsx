@@ -22,8 +22,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { getImageUrl } from "@/lib/utils";
 
 const navItems = [
-  { icon: Bell, label: "notifications", href: "/notifications", comingSoon: false, publicOnly: true },
-  { icon: Mail, label: "messages", href: "/messages", comingSoon: false, publicOnly: false },
+  { icon: Bell, label: "notifications", href: "/notifications", comingSoon: false, publicOnly: true, publicComingSoon: true },
+  { icon: Mail, label: "messages", href: "/messages", comingSoon: false, publicOnly: false, publicComingSoon: true },
 ];
 
 // Wallet types detection
@@ -282,13 +282,13 @@ export function LeftSidebar() {
             })
             .map((item) => (
             <li key={item.label}>
-              {item.comingSoon ? (
+              {(item.comingSoon || (item.publicComingSoon && !isShadowMode)) ? (
                 <div className={`flex items-center ${justify} gap-3 px-3 rounded-lg text-muted-foreground`}>
                   <item.icon className="w-5 h-5 flex-shrink-0" />
                   <div className={showBlock}>
                     <FlipButton
                       frontText={item.label}
-                      backText="coming soon"
+                      backText="not available in alpha"
                       from="top"
                       className="h-auto py-3 px-0 text-base font-normal"
                       frontClassName="bg-transparent text-muted-foreground justify-start"

@@ -28,6 +28,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useMode } from "@/contexts/mode-context";
 import {
   Connection,
   PublicKey,
@@ -64,6 +65,7 @@ function formatTimeAgo(timestamp: number): string {
 }
 
 function MessagesContent() {
+  const { isShadowMode } = useMode();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedWallet, isUnlocked: shadowUnlocked, refreshBalances } = useShadow();
@@ -612,6 +614,22 @@ function MessagesContent() {
     if (diffDays < 7) return `${diffDays}d`;
     return date.toLocaleDateString();
   };
+
+  // Public mode - not available in alpha
+  if (!isShadowMode) {
+    return (
+      <div className="border-x border-border min-h-screen">
+        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border px-4 py-3">
+          <h1 className="text-xl font-bold text-foreground">messages</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <Mail className="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <p className="text-lg font-medium text-foreground">still building</p>
+          <p className="text-sm text-muted-foreground mt-1">public messages are not available in alpha</p>
+        </div>
+      </div>
+    );
+  }
 
   // Shadow wallet not unlocked state
   if (!shadowUnlocked || !selectedWallet) {

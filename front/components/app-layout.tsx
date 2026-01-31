@@ -496,9 +496,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <span className="text-[10px]">messages</span>
               </button>
             ) : (
-              <button onClick={() => navigateTo("/notifications")} className={`flex flex-col items-center justify-center gap-1 ${pathname === "/notifications" ? "text-primary" : "text-foreground"}`}>
+              <button className="flex flex-col items-center justify-center gap-1 text-muted-foreground/40 cursor-not-allowed">
                 <Bell className="w-6 h-6" />
-                <span className="text-[10px]">notifs</span>
+                <span className="text-[10px]">alpha</span>
               </button>
             )}
             {isAuthenticated ? (
