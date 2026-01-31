@@ -343,6 +343,7 @@ function UserProfileContent() {
           src={bannerUrl}
           alt="Banner"
           className="w-full h-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_BANNER; }}
         />
       </div>
 

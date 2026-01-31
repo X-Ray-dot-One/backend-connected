@@ -19,8 +19,10 @@ COPY . /var/www/html/
 # Apache configuration for .htaccess
 RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html
+# Create upload directories and set permissions
+RUN mkdir -p /var/www/html/public/uploads/posts /var/www/html/public/uploads/profile_pictures \
+    && chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 /var/www/html/public/uploads
 
 EXPOSE 80
 
