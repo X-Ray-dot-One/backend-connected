@@ -1,0 +1,33 @@
+{
+  "name": "smart-contracts-shadow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/X-Ray-dot-One/smart-contracts-shadow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/X-Ray-dot-One/smart-contracts-shadow/issues"
+  },
+  "homepage": "https://github.com/X-Ray-dot-One/smart-contracts-shadow#readme",
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "privacycash": "^1.1.11",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
