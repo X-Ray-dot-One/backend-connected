@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
+import { ReactNode, useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Check, Plus, User, Loader2, Crown, Home, Search, Bell, Mail, PenSquare, Eye, EyeOff, Wallet, Lock } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
@@ -79,6 +79,23 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileAvailableWallets, setMobileAvailableWallets] = useState<string[]>([]);
   const [isMobileConnecting, setIsMobileConnecting] = useState(false);
   const [showBetaDisclaimer, setShowBetaDisclaimer] = useState(false);
+  const identityDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close identity dropdown on outside tap (mobile)
+  useEffect(() => {
+    if (!isIdentityOpen) return;
+    const handleTouch = (e: TouchEvent | MouseEvent) => {
+      if (identityDropdownRef.current && !identityDropdownRef.current.contains(e.target as Node)) {
+        setIsIdentityOpen(false);
+      }
+    };
+    document.addEventListener("touchstart", handleTouch);
+    document.addEventListener("mousedown", handleTouch);
+    return () => {
+      document.removeEventListener("touchstart", handleTouch);
+      document.removeEventListener("mousedown", handleTouch);
+    };
+  }, [isIdentityOpen]);
 
   // Show beta disclaimer on first visit
   useEffect(() => {
@@ -397,7 +414,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </button>
             ) : selectedWallet ? (
               /* Has wallets - show selector dropdown */
-              <>
+              <div ref={identityDropdownRef}>
                 <button
                   onClick={() => setIsIdentityOpen(!isIdentityOpen)}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shadow-lg ${
@@ -417,9 +434,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <ChevronDown className={`w-3 h-3 transition-transform ${isIdentityOpen ? "rotate-180" : ""}`} />
                 </button>
                 {isIdentityOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsIdentityOpen(false)} />
-                    <div className="absolute bottom-full mb-2 left-0 w-52 bg-card border border-border rounded-xl shadow-xl py-1.5 max-h-60 overflow-y-auto z-50">
+                  <div className="absolute bottom-full mb-2 left-0 w-52 bg-card border border-border rounded-xl shadow-xl py-1.5 max-h-60 overflow-y-auto z-[61]">
                       {shadowWallets.map((wallet, index) => {
                         const wp = premiumWallets.get(wallet.publicKey);
                         const isPrem = wp?.isPremium || false;
@@ -452,9 +467,8 @@ export function AppLayout({ children }: AppLayoutProps) {
                         </button>
                       </div>
                     </div>
-                  </>
                 )}
-              </>
+              </div>
             ) : null}
           </div>
         )}
