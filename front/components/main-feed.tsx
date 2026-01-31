@@ -160,6 +160,7 @@ interface Post {
   like_count: number;
   comment_count: number;
   has_liked: boolean;
+  image: string | null;
 }
 
 // Helper function to render content with colored mentions
