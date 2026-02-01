@@ -350,7 +350,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       )}
 
-      <main className="ml-0 md:ml-16 xl:ml-64 mr-0 xl:mr-96 pb-16 md:pb-0 h-full overflow-y-auto overflow-x-hidden">
+      <main data-onboarding="feed" className="ml-0 md:ml-16 xl:ml-64 mr-0 xl:mr-96 pb-16 md:pb-0 h-full overflow-y-auto overflow-x-hidden">
           {children}
         </main>
         <div className="hidden xl:block">
@@ -360,6 +360,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Mobile Mode Toggle - fixed bottom-right (hidden on messages page) */}
         {pathname !== "/messages" && (
         <button
+          data-onboarding="shadow-toggle"
           onClick={toggleMode}
           className={`md:hidden fixed bottom-[5.5rem] right-4 z-50 rounded-full flex items-center gap-1.5 shadow-lg transition-colors px-3 py-2.5 ${
             isShadowMode

@@ -206,6 +206,7 @@ export function LeftSidebar() {
       {/* Mode Toggle - Switch with Icons */}
       <div className={`mb-6 mx-0 xl:mx-3 flex flex-col items-center`}>
         <button
+          data-onboarding="shadow-toggle"
           onClick={toggleMode}
           className="flex items-center gap-2 p-1 rounded-full bg-muted/50 transition-colors"
         >

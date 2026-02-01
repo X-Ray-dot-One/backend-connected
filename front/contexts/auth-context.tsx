@@ -60,11 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      // Add timeout to prevent infinite loading if API is down
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), 5000)
-      );
-      const response = await Promise.race([api.getMe(), timeoutPromise]) as Awaited<ReturnType<typeof api.getMe>>;
+      const response = await api.getMe();
       if (response.success && response.user) {
         setUser(response.user);
         // Re-show profile setup if user never completed registration
@@ -107,11 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear any existing shadow session when switching wallets
     clearShadowSession();
     try {
-      // Add timeout to prevent infinite loading if API is down
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Connection timeout - server may be unavailable")), 10000)
-      );
-      const response = await Promise.race([api.walletAuth(walletAddress), timeoutPromise]) as Awaited<ReturnType<typeof api.walletAuth>>;
+      const response = await api.walletAuth(walletAddress);
       if (response.success && response.user) {
         setUser(response.user);
         // Show profile setup modal for new users

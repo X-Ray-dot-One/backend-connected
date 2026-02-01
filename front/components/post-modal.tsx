@@ -986,7 +986,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
 
             {/* Shadow Mode - Post as header with dropdown + help tooltip */}
             {isShadowMode && (
-              <div className="px-4 py-2 border-b border-border bg-primary/5">
+              <div data-onboarding="post-identity" className="px-4 py-2 border-b border-border bg-primary/5">
                 {/* Not unlocked warning */}
                 {!isShadowUnlocked && (
                   <div className="flex items-center gap-2 p-2 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
@@ -1110,7 +1110,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
 
             {/* Shadow Mode Target Selector */}
             {isShadowMode && (
-              <div className="px-4 py-3 border-b border-border">
+              <div data-onboarding="post-target" className="px-4 py-3 border-b border-border">
                 {isTargetLocked && lockedTargetInfo ? (
                   /* Locked state - show profile card */
                   <div className="flex items-center gap-3">
@@ -1375,7 +1375,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
             )}
 
             {/* Content - hidden on mobile until target is locked in shadow mode */}
-            <div className={`p-4 ${isShadowMode && !isTargetLocked ? "hidden md:block" : ""}`}>
+            <div data-onboarding="post-content" className={`p-4 ${isShadowMode && !isTargetLocked ? "hidden md:block" : ""}`}>
               <div className="flex gap-3">
                 {/* Avatar - only in public mode */}
                 {!isShadowMode && (
