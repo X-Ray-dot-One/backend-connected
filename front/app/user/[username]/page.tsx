@@ -40,6 +40,7 @@ import {
   UserX,
   EyeOff,
   Zap,
+  Crown,
 } from "lucide-react";
 import { getPostsForTarget, type TargetPost } from "@/lib/shadow/targetProfile";
 import { formatSol } from "@/lib/shadow/postService";
@@ -74,24 +75,54 @@ function getTimeAgo(timestamp: number): string {
 }
 
 // Shadow post card component
+// Premium cache for shadow post authors
+const premiumCache = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
+
+async function checkPremiumStatus(pubkey: string) {
+  if (premiumCache.has(pubkey)) return premiumCache.get(pubkey)!;
+  try {
+    const response = await api.isPremiumWallet(pubkey);
+    const result = { isPremium: response.is_premium || false, profilePicture: response.profile_picture || null };
+    premiumCache.set(pubkey, result);
+    return result;
+  } catch {
+    const fallback = { isPremium: false, profilePicture: null };
+    premiumCache.set(pubkey, fallback);
+    return fallback;
+  }
+}
+
 function ShadowPostCard({ post, rank, total }: { post: TargetPost; rank: number; total: number }) {
   const [authorName, setAuthorName] = useState<string | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [premiumPfp, setPremiumPfp] = useState<string | null>(null);
 
   useEffect(() => {
     getShadowName(post.author).then(setAuthorName);
+    checkPremiumStatus(post.author).then((status) => {
+      setIsPremium(status.isPremium);
+      setPremiumPfp(status.profilePicture);
+    });
   }, [post.author]);
 
   return (
     <div className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors">
       <div className="flex gap-3">
-        <div className="w-10 h-10 rounded-full flex-shrink-0 bg-primary/20 flex items-center justify-center ring-2 ring-primary/30">
-          <EyeOff className="w-5 h-5 text-primary" />
-        </div>
+        <a href={authorName ? `/shadow/${encodeURIComponent(authorName)}` : "#"} className="flex-shrink-0">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ring-2 ${isPremium ? "bg-pink-500/20 ring-pink-500/30" : "bg-primary/20 ring-primary/30"}`}>
+            {premiumPfp ? (
+              <img src={getImageUrl(premiumPfp, "")} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <EyeOff className={`w-5 h-5 ${isPremium ? "text-pink-500" : "text-primary"}`} />
+            )}
+          </div>
+        </a>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-primary">
+            <a href={authorName ? `/shadow/${encodeURIComponent(authorName)}` : "#"} className={`font-medium hover:underline ${isPremium ? "text-pink-500" : "text-primary"}`}>
+              {isPremium && <Crown className="w-3.5 h-3.5 inline mr-1" />}
               {authorName || "anonymous"}
-            </span>
+            </a>
             <span className="text-muted-foreground text-sm">
               {getTimeAgo(post.timestamp)}
             </span>
@@ -558,6 +589,11 @@ function UserProfileContent() {
                 <p className="mt-1 text-foreground font-sans">
                   {renderContentWithMentions(post.content)}
                 </p>
+                {post.image && (
+                  <div className="mt-2 rounded-xl overflow-hidden border border-border">
+                    <img src={getImageUrl(post.image, "")} alt="" className="w-full max-h-96 object-cover" />
+                  </div>
+                )}
                 <div className="flex items-center gap-6 mt-3">
                   <button
                     onClick={(e) => {

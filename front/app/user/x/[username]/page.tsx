@@ -12,7 +12,9 @@ import {
   Users,
   FileText,
   TrendingUp,
+  Crown,
 } from "lucide-react";
+import { getImageUrl } from "@/lib/utils";
 import {
   fetchXProfile,
   getDefaultProfile,
@@ -50,21 +52,50 @@ function getTimeAgo(timestamp: number): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
+// Premium cache for shadow post authors
+const premiumCache = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
+
+async function checkPremiumStatus(pubkey: string) {
+  if (premiumCache.has(pubkey)) return premiumCache.get(pubkey)!;
+  try {
+    const response = await api.isPremiumWallet(pubkey);
+    const result = { isPremium: response.is_premium || false, profilePicture: response.profile_picture || null };
+    premiumCache.set(pubkey, result);
+    return result;
+  } catch {
+    const fallback = { isPremium: false, profilePicture: null };
+    premiumCache.set(pubkey, fallback);
+    return fallback;
+  }
+}
+
 // Shadow post card for this page
 function ShadowPostCard({ post, rank }: { post: TargetPost; rank: number }) {
   const [authorName, setAuthorName] = useState<string | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [premiumPfp, setPremiumPfp] = useState<string | null>(null);
 
   useEffect(() => {
     getShadowName(post.author).then(setAuthorName);
+    checkPremiumStatus(post.author).then((status) => {
+      setIsPremium(status.isPremium);
+      setPremiumPfp(status.profilePicture);
+    });
   }, [post.author]);
 
   return (
     <div className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors">
       <div className="flex gap-3">
         {/* Anonymous avatar */}
-        <div className="w-10 h-10 rounded-full flex-shrink-0 bg-primary/20 flex items-center justify-center ring-2 ring-primary/30">
-          <EyeOff className="w-5 h-5 text-primary" />
-        </div>
+        <a href={authorName ? `/shadow/${encodeURIComponent(authorName)}` : "#"} className="flex-shrink-0">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ring-2 ${isPremium ? "bg-pink-500/20 ring-pink-500/30" : "bg-primary/20 ring-primary/30"}`}>
+            {premiumPfp ? (
+              <img src={getImageUrl(premiumPfp, "")} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <EyeOff className={`w-5 h-5 ${isPremium ? "text-pink-500" : "text-primary"}`} />
+            )}
+          </div>
+        </a>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -81,9 +112,10 @@ function ShadowPostCard({ post, rank }: { post: TargetPost; rank: number }) {
             )}
 
             {/* Shadow identity name */}
-            <span className="font-medium text-primary">
+            <a href={authorName ? `/shadow/${encodeURIComponent(authorName)}` : "#"} className={`font-medium hover:underline ${isPremium ? "text-pink-500" : "text-primary"}`}>
+              {isPremium && <Crown className="w-3.5 h-3.5 inline mr-1" />}
               {authorName || "..."}
-            </span>
+            </a>
 
             <span className="text-muted-foreground text-sm">
               {getTimeAgo(post.timestamp)}
@@ -277,7 +309,7 @@ function XProfileContent() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-1.5 text-2xl font-bold text-amber-500">
                 <Zap className="w-5 h-5" />
-                {totalBoosted.toFixed(2)}
+                {totalBoosted < 0.01 ? totalBoosted.toFixed(4) : totalBoosted.toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Total SOL</p>
             </div>
