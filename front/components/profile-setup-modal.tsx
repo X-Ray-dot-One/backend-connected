@@ -73,6 +73,7 @@ export function ProfileSetupModal({
   const [isMobileToggle, setIsMobileToggle] = useState(false);
   const [feedRect, setFeedRect] = useState<DOMRect | null>(null);
   const [feedExplainStep, setFeedExplainStep] = useState(0);
+  const scrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
   const defaultAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${walletAddress}`;
@@ -111,10 +112,13 @@ export function ProfileSetupModal({
       const feedEl = document.querySelector('[data-onboarding="feed"]') as HTMLElement | null;
       if (feedEl) {
         setFeedRect(feedEl.getBoundingClientRect());
-        const scrollInterval = setInterval(() => {
+        scrollIntervalRef.current = setInterval(() => {
           feedEl.scrollBy({ top: 1, behavior: "auto" });
         }, 30);
-        return () => clearInterval(scrollInterval);
+        return () => {
+          if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+          scrollIntervalRef.current = null;
+        };
       }
     }
   }, [step, shadowStep]);
@@ -353,6 +357,7 @@ export function ProfileSetupModal({
 
     const handleFeedNext = () => {
       if (isLastExplain) {
+        if (scrollIntervalRef.current) { clearInterval(scrollIntervalRef.current); scrollIntervalRef.current = null; }
         handleComplete();
       } else {
         setFeedExplainStep(prev => prev + 1);
