@@ -65,8 +65,17 @@ const CLEAR_SHADOW_EVENT = "xray_clear_shadow";
 // This triggers a custom event that the ShadowProvider listens to
 export function clearShadowSession() {
   sessionStorage.removeItem(SESSION_KEY);
-  // Dispatch event to notify ShadowProvider to reset its state
+  // Clear cached shadow wallet names from localStorage
   if (typeof window !== "undefined") {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+    // Dispatch event to notify ShadowProvider to reset its state
     window.dispatchEvent(new Event(CLEAR_SHADOW_EVENT));
   }
 }

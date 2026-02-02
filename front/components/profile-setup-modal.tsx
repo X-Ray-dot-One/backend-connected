@@ -214,6 +214,8 @@ export function ProfileSetupModal({
   };
 
   const handleComplete = async () => {
+    // Reset to public mode after onboarding (user toggled shadow during tutorial)
+    if (isShadowMode) toggleMode();
     setIsSaving(true);
     try {
       if (MOCK_MODE) {
