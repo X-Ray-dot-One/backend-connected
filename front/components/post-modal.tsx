@@ -665,7 +665,7 @@ export function PostModal({ isOpen, onClose, userAvatar, username, isShadowMode 
         // Check if shadow wallet has enough funds - auto-fund if needed
         if (currentBalance < requiredLamports) {
           const needed = Number(requiredLamports - currentBalance) / 1_000_000_000;
-          const fundAmountSol = needed + 0.01; // Add small buffer
+          const fundAmountSol = needed;
 
           setPostingStep("funding wallet...");
 
