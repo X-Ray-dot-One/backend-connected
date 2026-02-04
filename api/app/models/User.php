@@ -455,10 +455,11 @@ class User {
                 FROM users u
                 WHERE u.id != :current_user_id
                 AND u.username IS NOT NULL
+                AND u.profile_picture IS NOT NULL
                 AND u.id NOT IN (
                     SELECT following_id FROM follows WHERE follower_id = :current_user_id2
                 )
-                ORDER BY u.created_at DESC
+                ORDER BY RAND()
                 LIMIT :limit
             ");
 
@@ -470,7 +471,8 @@ class User {
                 SELECT u.id, u.username, u.profile_picture, u.bio
                 FROM users u
                 WHERE u.username IS NOT NULL
-                ORDER BY u.created_at DESC
+                AND u.profile_picture IS NOT NULL
+                ORDER BY RAND()
                 LIMIT :limit
             ");
 

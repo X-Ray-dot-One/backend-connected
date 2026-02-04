@@ -279,6 +279,55 @@ class ShadowWalletController {
     }
 
     /**
+     * POST /api/wallets/batch
+     * Récupère les infos (nom + premium) de plusieurs wallets en une seule requête
+     */
+    public function getBatch() {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            exit;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $wallets = $input['wallets'] ?? [];
+
+        if (!is_array($wallets) || count($wallets) === 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'wallets array is required']);
+            exit;
+        }
+
+        // Limit to 100 wallets per request
+        if (count($wallets) > 100) {
+            $wallets = array_slice($wallets, 0, 100);
+        }
+
+        // Validate all wallet addresses
+        $validWallets = [];
+        foreach ($wallets as $wallet) {
+            if (preg_match('/^[1-9A-HJ-NP-Za-km-z]{32,44}$/', $wallet)) {
+                $validWallets[] = $wallet;
+            }
+        }
+
+        if (count($validWallets) === 0) {
+            echo json_encode(['success' => true, 'results' => []]);
+            exit;
+        }
+
+        $results = $this->shadowWalletModel->getBatchInfo($validWallets);
+
+        echo json_encode([
+            'success' => true,
+            'results' => $results
+        ]);
+        exit;
+    }
+
+    /**
      * GET /api/wallets/by-name?name=xxx
      * Récupère un shadow wallet par son nom
      */

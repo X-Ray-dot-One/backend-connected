@@ -1,4 +1,25 @@
 services:
+  # MySQL local pour dev
+  mysql:
+    image: mysql:8.0
+    container_name: xray_mysql_dev
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: xray_db
+      MYSQL_USER: xray_user
+      MYSQL_PASSWORD: devpassword
+    volumes:
+      - mysql_data_dev:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - xray_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # Nginx reverse proxy
   nginx:
     image: nginx:alpine
@@ -26,14 +47,14 @@ services:
       - ./api:/var/www/html
     networks:
       - xray_network
-    # Le tunnel SSH doit être actif: ssh -L 0.0.0.0:3306:127.0.0.1:3306 root@109.176.199.253
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      mysql:
+        condition: service_healthy
     environment:
-      - MYSQL_HOST=host.docker.internal
+      - MYSQL_HOST=mysql
       - MYSQL_DATABASE=xray_db
       - MYSQL_USER=xray_user
-      - MYSQL_PASSWORD=Gn*uTl7M*1TzaV
+      - MYSQL_PASSWORD=devpassword
 
   # Next.js Frontend (Development mode with hot reload)
   front:
@@ -57,6 +78,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+volumes:
+  mysql_data_dev:
 
 networks:
   xray_network:

@@ -7,6 +7,7 @@ class Post {
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
         $this->ensureImageColumn();
+        $this->ensureCommentImageColumn();
     }
 
     private function ensureImageColumn() {
@@ -20,10 +21,21 @@ class Post {
         }
     }
 
+    private function ensureCommentImageColumn() {
+        try {
+            $stmt = $this->db->query("SHOW COLUMNS FROM comments LIKE 'image'");
+            if ($stmt->rowCount() === 0) {
+                $this->db->exec("ALTER TABLE comments ADD COLUMN image VARCHAR(255) DEFAULT NULL AFTER content");
+            }
+        } catch (PDOException $e) {
+            // Ignore - table might not exist yet
+        }
+    }
+
     /**
      * Récupère tous les posts triés par date décroissante avec les infos utilisateur
      */
-    public function getAllPosts($limit = 50) {
+    public function getAllPosts($limit = 50, $offset = 0) {
         $stmt = $this->db->prepare("
             SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.image, p.created_at,
                    u.wallet_address as user_wallet,
@@ -32,9 +44,10 @@ class Post {
             FROM posts p
             LEFT JOIN users u ON p.user_id = u.id
             ORDER BY p.created_at DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -42,16 +55,17 @@ class Post {
     /**
      * Récupère les posts d'un utilisateur spécifique
      */
-    public function getPostsByUserId($userId, $limit = 50) {
+    public function getPostsByUserId($userId, $limit = 50, $offset = 0) {
         $stmt = $this->db->prepare("
             SELECT id, user_id, twitter_username, twitter_profile_image, content, image, created_at
             FROM posts
             WHERE user_id = :user_id
             ORDER BY created_at DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -95,7 +109,7 @@ class Post {
     /**
      * Récupère les posts des utilisateurs suivis par un utilisateur
      */
-    public function getFollowingPosts($userId, $limit = 50) {
+    public function getFollowingPosts($userId, $limit = 50, $offset = 0) {
         $stmt = $this->db->prepare("
             SELECT p.id, p.user_id, p.twitter_username, p.twitter_profile_image, p.content, p.image, p.created_at,
                    u.wallet_address as user_wallet,
@@ -106,10 +120,11 @@ class Post {
             LEFT JOIN users u ON p.user_id = u.id
             WHERE f.follower_id = :user_id
             ORDER BY p.created_at DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -156,17 +171,19 @@ class Post {
     }
 
     /**
-     * Add a comment to a post
+     * Add a comment to a post (or reply to another comment)
      */
-    public function addComment($postId, $userId, $content) {
+    public function addComment($postId, $userId, $content, $parentCommentId = null, $image = null) {
         $stmt = $this->db->prepare("
-            INSERT INTO comments (post_id, user_id, content)
-            VALUES (:post_id, :user_id, :content)
+            INSERT INTO comments (post_id, user_id, content, parent_comment_id, image)
+            VALUES (:post_id, :user_id, :content, :parent_comment_id, :image)
         ");
         $success = $stmt->execute([
             ':post_id' => $postId,
             ':user_id' => $userId,
-            ':content' => $content
+            ':content' => $content,
+            ':parent_comment_id' => $parentCommentId,
+            ':image' => $image
         ]);
 
         if ($success) {
@@ -176,12 +193,13 @@ class Post {
     }
 
     /**
-     * Get comments for a post
+     * Get comments for a post (with reply counts)
      */
-    public function getComments($postId, $limit = 50) {
+    public function getComments($postId, $limit = 100) {
         $stmt = $this->db->prepare("
-            SELECT c.id, c.content, c.created_at, c.user_id,
-                   u.username, u.profile_picture, u.wallet_address
+            SELECT c.id, c.content, c.image, c.created_at, c.user_id, c.parent_comment_id,
+                   u.username, u.profile_picture, u.wallet_address,
+                   (SELECT COUNT(*) FROM comments r WHERE r.parent_comment_id = c.id) as reply_count
             FROM comments c
             LEFT JOIN users u ON c.user_id = u.id
             WHERE c.post_id = :post_id
@@ -192,6 +210,42 @@ class Post {
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Get replies to a specific comment
+     */
+    public function getCommentReplies($commentId, $limit = 50) {
+        $stmt = $this->db->prepare("
+            SELECT c.id, c.content, c.image, c.created_at, c.user_id, c.parent_comment_id,
+                   u.username, u.profile_picture, u.wallet_address,
+                   (SELECT COUNT(*) FROM comments r WHERE r.parent_comment_id = c.id) as reply_count
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.parent_comment_id = :comment_id
+            ORDER BY c.created_at ASC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':comment_id', $commentId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Get a single comment by ID
+     */
+    public function getCommentById($commentId) {
+        $stmt = $this->db->prepare("
+            SELECT c.id, c.content, c.image, c.created_at, c.user_id, c.parent_comment_id, c.post_id,
+                   u.username, u.profile_picture, u.wallet_address,
+                   (SELECT COUNT(*) FROM comments r WHERE r.parent_comment_id = c.id) as reply_count
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.id = :comment_id
+        ");
+        $stmt->execute([':comment_id' => $commentId]);
+        return $stmt->fetch();
     }
 
     /**

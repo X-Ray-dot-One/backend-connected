@@ -288,33 +288,52 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
       let regeneratedWallets: ShadowWalletWithBalance[] = [];
 
       if (walletCount > 0) {
-        // Generate exactly walletCount wallets (matching DB count)
-        const existingNames: string[] = [];
-
+        // Generate all keypairs first
+        const keypairs: { index: number; pubkey: string }[] = [];
         for (let i = 0; i < walletCount; i++) {
           const keypair = await generateShadowWallet(sig, userId, i);
-          const pubkey = keypair.publicKey.toBase58();
+          keypairs.push({ index: i, pubkey: keypair.publicKey.toBase58() });
+        }
 
-          // Try to get name from localStorage first, then backend, then generate new
+        // Find wallets that need names from backend (not in localStorage)
+        const walletsNeedingNames = keypairs.filter(
+          kp => !savedWallets.find(sw => sw.index === kp.index)
+        );
+
+        // Fetch all names in a single batch call (instead of N individual calls)
+        let batchNames: Record<string, string | null> = {};
+        if (walletsNeedingNames.length > 0) {
+          try {
+            const pubkeys = walletsNeedingNames.map(w => w.pubkey);
+            const batchResponse = await api.getShadowWalletsBatch(pubkeys);
+            if (batchResponse.success && batchResponse.results) {
+              for (const [pubkey, info] of Object.entries(batchResponse.results)) {
+                batchNames[pubkey] = info.name;
+              }
+            }
+          } catch {
+            // Batch fetch failed, will generate names locally
+          }
+        }
+
+        // Build wallet list with names
+        const existingNames: string[] = [];
+        for (const kp of keypairs) {
+          const savedWallet = savedWallets.find(w => w.index === kp.index);
           let name: string;
-          const savedWallet = savedWallets.find(w => w.index === i);
 
           if (savedWallet) {
             name = savedWallet.name;
+          } else if (batchNames[kp.pubkey]) {
+            name = batchNames[kp.pubkey]!;
           } else {
-            // Try to get name from backend
-            try {
-              const nameResponse = await api.getShadowWalletName(pubkey);
-              name = nameResponse.name || generateShadowName(existingNames);
-            } catch {
-              name = generateShadowName(existingNames);
-            }
+            name = generateShadowName(existingNames);
           }
           existingNames.push(name);
 
           regeneratedWallets.push({
-            index: i,
-            publicKey: pubkey,
+            index: kp.index,
+            publicKey: kp.pubkey,
             name,
             balance: 0,
           });
@@ -462,21 +481,18 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
     if (wallets.length === 0) return;
 
     try {
-      // Fetch balances sequentially with delay to avoid rate limits
-      const updatedWallets: ShadowWalletWithBalance[] = [];
-      for (const wallet of wallets) {
+      // Fetch all balances in parallel (much faster than sequential)
+      const balancePromises = wallets.map(async (wallet) => {
         try {
           const balance = await getWalletBalance(new PublicKey(wallet.publicKey));
-          updatedWallets.push({ ...wallet, balance });
+          return { ...wallet, balance };
         } catch {
           // Keep existing balance on error
-          updatedWallets.push(wallet);
+          return wallet;
         }
-        // Small delay between requests to avoid rate limiting
-        if (wallets.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
+      });
+
+      const updatedWallets = await Promise.all(balancePromises);
       setWallets(updatedWallets);
     } catch (error) {
       // Silently handle errors - balances will show as 0
@@ -568,23 +584,38 @@ export function ShadowProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timeout);
   }, [selectedWallet?.publicKey]);
 
-  // Refresh balances periodically (with initial delay)
+  // Refresh balances periodically - fetch selected wallet IMMEDIATELY, others with delay
   useEffect(() => {
     if (!isUnlocked || wallets.length === 0) return;
 
-    // Delay initial balance fetch to avoid rate limits during unlock
-    const initialTimeout = setTimeout(() => {
-      refreshBalances();
-    }, 2000);
+    // Fetch selected wallet balance IMMEDIATELY (no delay)
+    const fetchSelectedWalletBalance = async () => {
+      if (selectedWalletIndex !== null && wallets[selectedWalletIndex]) {
+        try {
+          const balance = await getWalletBalance(new PublicKey(wallets[selectedWalletIndex].publicKey));
+          setWallets(prev => prev.map((w, i) =>
+            i === selectedWalletIndex ? { ...w, balance } : w
+          ));
+        } catch (e) {
+          console.warn("Failed to fetch selected wallet balance:", e);
+        }
+      }
+    };
+    fetchSelectedWalletBalance();
 
-    // Then refresh every 60 seconds (reduced frequency to avoid rate limits)
+    // Fetch other wallets after a short delay
+    const otherWalletsTimeout = setTimeout(() => {
+      refreshBalances();
+    }, 1000);
+
+    // Then refresh every 60 seconds
     const interval = setInterval(refreshBalances, 60000);
 
     return () => {
-      clearTimeout(initialTimeout);
+      clearTimeout(otherWalletsTimeout);
       clearInterval(interval);
     };
-  }, [isUnlocked, wallets.length]);
+  }, [isUnlocked, wallets.length, selectedWalletIndex]);
 
   // ============================================================================
   // RENDER

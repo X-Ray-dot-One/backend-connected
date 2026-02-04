@@ -149,6 +149,11 @@ elseif ($action === 'api-wallets-search') {
     $shadowWalletController = new ShadowWalletController();
     $shadowWalletController->search();
 }
+// POST /api/wallets/batch - Récupère les infos de plusieurs wallets en batch
+elseif ($action === 'api-wallets-batch') {
+    $shadowWalletController = new ShadowWalletController();
+    $shadowWalletController->getBatch();
+}
 // GET /api/wallets/by-name?name=xxx - Récupère un shadow wallet par son nom
 elseif ($action === 'api-wallets-by-name') {
     $shadowWalletController = new ShadowWalletController();
@@ -471,19 +476,29 @@ elseif ($action === 'get-posts') {
     $postModel = new Post();
 
     $page = intval($_GET['page'] ?? 1);
-    $limit = intval($_GET['limit'] ?? 50);
+    $limit = intval($_GET['limit'] ?? 40);
     $userId = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
     $feed = $_GET['feed'] ?? 'all';
+    $offset = ($page - 1) * $limit;
 
     $currentUserId = AuthController::getCurrentUserId();
 
+    // Fetch limit+1 to check if there are more posts
+    $fetchLimit = $limit + 1;
+
     // Fetch posts based on feed type
     if ($userId) {
-        $posts = $postModel->getPostsByUserId($userId, $limit);
+        $posts = $postModel->getPostsByUserId($userId, $fetchLimit, $offset);
     } elseif ($feed === 'following' && $currentUserId) {
-        $posts = $postModel->getFollowingPosts($currentUserId, $limit);
+        $posts = $postModel->getFollowingPosts($currentUserId, $fetchLimit, $offset);
     } else {
-        $posts = $postModel->getAllPosts($limit);
+        $posts = $postModel->getAllPosts($fetchLimit, $offset);
+    }
+
+    // Check if there are more posts
+    $hasMore = count($posts) > $limit;
+    if ($hasMore) {
+        array_pop($posts); // Remove the extra post
     }
 
     // Format posts for frontend
@@ -518,7 +533,9 @@ elseif ($action === 'get-posts') {
 
     echo json_encode([
         'success' => true,
-        'posts' => $formattedPosts
+        'posts' => $formattedPosts,
+        'hasMore' => $hasMore,
+        'page' => $page
     ]);
     exit;
 }
@@ -853,9 +870,20 @@ elseif ($action === 'add-comment') {
         exit;
     }
 
-    $input = json_decode(file_get_contents('php://input'), true);
-    $postId = intval($input['post_id'] ?? 0);
-    $content = trim($input['content'] ?? '');
+    // Support both JSON and multipart form data
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    $isMultipart = strpos($contentType, 'multipart/form-data') !== false;
+
+    if ($isMultipart) {
+        $postId = intval($_POST['post_id'] ?? 0);
+        $content = trim($_POST['content'] ?? '');
+        $parentCommentId = isset($_POST['parent_comment_id']) && $_POST['parent_comment_id'] !== '' ? intval($_POST['parent_comment_id']) : null;
+    } else {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $postId = intval($input['post_id'] ?? 0);
+        $content = trim($input['content'] ?? '');
+        $parentCommentId = isset($input['parent_comment_id']) ? intval($input['parent_comment_id']) : null;
+    }
 
     if (!$postId) {
         echo json_encode(['success' => false, 'error' => 'Post ID required']);
@@ -872,11 +900,51 @@ elseif ($action === 'add-comment') {
         exit;
     }
 
+    // Handle image upload
+    $imagePath = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $maxSize = 20 * 1024 * 1024; // 20MB
+        if ($_FILES['image']['size'] > $maxSize) {
+            echo json_encode(['success' => false, 'error' => 'Image must be less than 20MB']);
+            exit;
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = finfo_file($finfo, $_FILES['image']['tmp_name']);
+        finfo_close($finfo);
+
+        if (!in_array($mimeType, $allowedTypes)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid image type. Allowed: JPG, PNG, GIF, WebP']);
+            exit;
+        }
+
+        $ext = match($mimeType) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => 'jpg'
+        };
+
+        $uploadDir = __DIR__ . '/public/uploads/comments/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $filename = 'comment_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+        $destination = $uploadDir . $filename;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $destination)) {
+            $imagePath = 'uploads/comments/' . $filename;
+        }
+    }
+
     require_once __DIR__ . '/app/models/Post.php';
     $postModel = new Post();
 
     $userId = AuthController::getCurrentUserId();
-    $commentId = $postModel->addComment($postId, $userId, $content);
+    $commentId = $postModel->addComment($postId, $userId, $content, $parentCommentId, $imagePath);
 
     if ($commentId) {
         $currentUser = AuthController::getCurrentUser();
@@ -887,8 +955,16 @@ elseif ($action === 'add-comment') {
             'comment' => [
                 'id' => $commentId,
                 'content' => $content,
+                'image' => $imagePath,
                 'username' => $currentUser['username'] ?? 'Anonymous',
                 'profile_picture' => $currentUser['profile_picture'] ?? null,
+                'wallet_address' => $currentUser['wallet_address'] ?? null,
+                'user_id' => $userId,
+                'parent_comment_id' => $parentCommentId,
+                'reply_count' => 0,
+                'time_ago' => 'now',
+                'like_count' => 0,
+                'has_liked' => false,
                 'created_at' => date('Y-m-d H:i:s')
             ],
             'comment_count' => $commentCount
@@ -915,7 +991,7 @@ elseif ($action === 'get-comments') {
     $post = $postModel->getPostWithUserById($postId);
     $currentUserId = AuthController::getCurrentUserId();
 
-    // Format comments with time ago and like info
+    // Format comments with time ago, like info, and thread info
     $formattedComments = array_map(function($comment) use ($postModel, $currentUserId) {
         $time = strtotime($comment['created_at']);
         $diff = time() - $time;
@@ -932,10 +1008,13 @@ elseif ($action === 'get-comments') {
         return [
             'id' => $comment['id'],
             'content' => $comment['content'],
+            'image' => $comment['image'] ?? null,
             'username' => $comment['username'] ?? 'Anonymous',
             'profile_picture' => $comment['profile_picture'],
             'wallet_address' => $comment['wallet_address'],
             'user_id' => $comment['user_id'],
+            'parent_comment_id' => $comment['parent_comment_id'],
+            'reply_count' => intval($comment['reply_count'] ?? 0),
             'time_ago' => $timeAgo,
             'like_count' => $postModel->getCommentLikeCount($comment['id']),
             'has_liked' => $currentUserId ? $postModel->hasUserLikedComment($comment['id'], $currentUserId) : false
@@ -947,6 +1026,59 @@ elseif ($action === 'get-comments') {
         'post' => $post,
         'comments' => $formattedComments,
         'comment_count' => count($comments)
+    ]);
+    exit;
+}
+// Get replies to a specific comment
+elseif ($action === 'get-comment-replies') {
+    header('Content-Type: application/json');
+
+    $commentId = intval($_GET['comment_id'] ?? 0);
+
+    if (!$commentId) {
+        echo json_encode(['success' => false, 'error' => 'Comment ID required']);
+        exit;
+    }
+
+    require_once __DIR__ . '/app/models/Post.php';
+    $postModel = new Post();
+    $currentUserId = AuthController::getCurrentUserId();
+
+    $replies = $postModel->getCommentReplies($commentId);
+
+    // Format replies
+    $formattedReplies = array_map(function($reply) use ($postModel, $currentUserId) {
+        $time = strtotime($reply['created_at']);
+        $diff = time() - $time;
+        if ($diff < 60) {
+            $timeAgo = $diff . 's';
+        } elseif ($diff < 3600) {
+            $timeAgo = floor($diff / 60) . 'm';
+        } elseif ($diff < 86400) {
+            $timeAgo = floor($diff / 3600) . 'h';
+        } else {
+            $timeAgo = floor($diff / 86400) . 'd';
+        }
+
+        return [
+            'id' => $reply['id'],
+            'content' => $reply['content'],
+            'image' => $reply['image'] ?? null,
+            'username' => $reply['username'] ?? 'Anonymous',
+            'profile_picture' => $reply['profile_picture'],
+            'wallet_address' => $reply['wallet_address'],
+            'user_id' => $reply['user_id'],
+            'parent_comment_id' => $reply['parent_comment_id'],
+            'reply_count' => intval($reply['reply_count'] ?? 0),
+            'time_ago' => $timeAgo,
+            'like_count' => $postModel->getCommentLikeCount($reply['id']),
+            'has_liked' => $currentUserId ? $postModel->hasUserLikedComment($reply['id'], $currentUserId) : false
+        ];
+    }, $replies);
+
+    echo json_encode([
+        'success' => true,
+        'replies' => $formattedReplies
     ]);
     exit;
 }

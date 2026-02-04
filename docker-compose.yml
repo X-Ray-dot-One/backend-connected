@@ -26,12 +26,9 @@ services:
       - ./api:/var/www/html
     networks:
       - xray_network
-    # Pour la prod: connexion directe au serveur MySQL distant
-    # Le serveur doit autoriser les connexions depuis l'IP de ce serveur
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # Connexion à la DB externe (prod)
     environment:
-      - MYSQL_HOST=mysql_db
+      - MYSQL_HOST=109.176.199.253
       - MYSQL_DATABASE=xray_db
       - MYSQL_USER=xray_user
       - MYSQL_PASSWORD=Gn*uTl7M*1TzaV

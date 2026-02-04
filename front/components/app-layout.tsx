@@ -185,24 +185,33 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   };
 
-  // Load premium status for all shadow wallets
+  // Load premium status for all shadow wallets using batch API
   useEffect(() => {
     const loadPremiumStatus = async () => {
       if (shadowWallets.length === 0) return;
 
-      const newPremiumMap = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
-      for (const wallet of shadowWallets) {
-        try {
-          const result = await api.isPremiumWallet(wallet.publicKey);
-          newPremiumMap.set(wallet.publicKey, {
-            isPremium: result.is_premium || false,
-            profilePicture: result.profile_picture || null,
-          });
-        } catch {
+      const walletPubkeys = shadowWallets.map(w => w.publicKey);
+
+      try {
+        const response = await api.getShadowWalletsBatch(walletPubkeys);
+        if (response.success && response.results) {
+          const newPremiumMap = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
+          for (const [pubkey, info] of Object.entries(response.results)) {
+            newPremiumMap.set(pubkey, {
+              isPremium: info.is_premium || false,
+              profilePicture: info.profile_picture || null,
+            });
+          }
+          setPremiumWallets(newPremiumMap);
+        }
+      } catch {
+        // On error, set all to non-premium
+        const newPremiumMap = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
+        for (const wallet of shadowWallets) {
           newPremiumMap.set(wallet.publicKey, { isPremium: false, profilePicture: null });
         }
+        setPremiumWallets(newPremiumMap);
       }
-      setPremiumWallets(newPremiumMap);
     };
 
     loadPremiumStatus();

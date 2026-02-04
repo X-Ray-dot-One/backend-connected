@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Crown,
   Globe,
+  Users,
 } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -27,51 +28,9 @@ import { extractXUsername, extractXrayUsername } from "@/lib/shadow/targetProfil
 import { NddPurchaseModal } from "@/components/ndd-purchase-modal";
 import type { PremiumNdd } from "@/lib/api";
 
-// Cache for shadow wallet names to avoid repeated API calls
-const shadowNameCache = new Map<string, string>();
-// Cache for premium status and profile picture
-const premiumCache = new Map<string, { isPremium: boolean; profilePicture: string | null }>();
-// Queue for progressive loading (most recent first)
-let loadingQueue: string[] = [];
-let isProcessingQueue = false;
-
-async function getShadowName(authorPubkey: string): Promise<string> {
-  // Check cache first
-  if (shadowNameCache.has(authorPubkey)) {
-    return shadowNameCache.get(authorPubkey)!;
-  }
-
-  try {
-    const response = await api.getShadowWalletName(authorPubkey);
-    const name = response.name || "unknown";
-    shadowNameCache.set(authorPubkey, name);
-    return name;
-  } catch {
-    shadowNameCache.set(authorPubkey, "unknown");
-    return "unknown";
-  }
-}
-
-async function checkPremiumStatus(authorPubkey: string): Promise<{ isPremium: boolean; profilePicture: string | null }> {
-  // Check cache first
-  if (premiumCache.has(authorPubkey)) {
-    return premiumCache.get(authorPubkey)!;
-  }
-
-  try {
-    const response = await api.isPremiumWallet(authorPubkey);
-    const result = {
-      isPremium: response.is_premium || false,
-      profilePicture: response.profile_picture || null
-    };
-    premiumCache.set(authorPubkey, result);
-    return result;
-  } catch {
-    const defaultResult = { isPremium: false, profilePicture: null };
-    premiumCache.set(authorPubkey, defaultResult);
-    return defaultResult;
-  }
-}
+// Cache for author info (name + premium status + profile picture)
+const authorInfoCache = new Map<string, { name: string; isPremium: boolean; profilePicture: string | null }>();
+let isBatchLoading = false;
 
 // Event emitter for author info updates
 type AuthorInfoListener = (pubkey: string, name: string, isPremium: boolean, pfp: string | null) => void;
@@ -87,65 +46,75 @@ function notifyAuthorInfoUpdate(pubkey: string, name: string, isPremium: boolean
 }
 
 /**
- * Process the loading queue progressively (most recent posts first)
- * Loads author names and premium status one by one with a small delay
+ * Batch load author info for multiple wallets in a single API call
  */
-async function processLoadingQueue() {
-  if (isProcessingQueue || loadingQueue.length === 0) return;
+async function queueAuthorsForLoading(authorPubkeys: string[]) {
+  // Get unique authors not yet in cache
+  const uniqueAuthors = [...new Set(authorPubkeys)];
+  const uncachedAuthors = uniqueAuthors.filter(pubkey => !authorInfoCache.has(pubkey));
 
-  isProcessingQueue = true;
-
-  while (loadingQueue.length > 0) {
-    const pubkey = loadingQueue.shift()!;
-
-    // Skip if already cached
-    if (shadowNameCache.has(pubkey) && premiumCache.has(pubkey)) {
-      notifyAuthorInfoUpdate(
-        pubkey,
-        shadowNameCache.get(pubkey)!,
-        premiumCache.get(pubkey)!.isPremium,
-        premiumCache.get(pubkey)!.profilePicture
-      );
-      continue;
+  // Notify for already cached authors immediately
+  for (const pubkey of uniqueAuthors) {
+    if (authorInfoCache.has(pubkey)) {
+      const info = authorInfoCache.get(pubkey)!;
+      notifyAuthorInfoUpdate(pubkey, info.name, info.isPremium, info.profilePicture);
     }
-
-    // Fetch name and premium status
-    try {
-      const [name, premiumStatus] = await Promise.all([
-        getShadowName(pubkey),
-        checkPremiumStatus(pubkey)
-      ]);
-
-      notifyAuthorInfoUpdate(pubkey, name, premiumStatus.isPremium, premiumStatus.profilePicture);
-    } catch {
-      notifyAuthorInfoUpdate(pubkey, "unknown", false, null);
-    }
-
-    // Small delay to avoid hammering the API
-    await new Promise(resolve => setTimeout(resolve, 50));
   }
 
-  isProcessingQueue = false;
+  // If all are cached or already loading, skip
+  if (uncachedAuthors.length === 0 || isBatchLoading) return;
+
+  isBatchLoading = true;
+
+  try {
+    // Single batch API call for all uncached authors
+    const response = await api.getShadowWalletsBatch(uncachedAuthors);
+
+    if (response.success && response.results) {
+      for (const [pubkey, info] of Object.entries(response.results)) {
+        const authorInfo = {
+          name: info.name || "unknown",
+          isPremium: info.is_premium || false,
+          profilePicture: info.profile_picture || null
+        };
+
+        // Update cache
+        authorInfoCache.set(pubkey, authorInfo);
+
+        // Notify listeners
+        notifyAuthorInfoUpdate(pubkey, authorInfo.name, authorInfo.isPremium, authorInfo.profilePicture);
+      }
+    }
+  } catch (err) {
+    console.error("Batch load failed:", err);
+    // Set default values for failed authors
+    for (const pubkey of uncachedAuthors) {
+      if (!authorInfoCache.has(pubkey)) {
+        authorInfoCache.set(pubkey, { name: "unknown", isPremium: false, profilePicture: null });
+        notifyAuthorInfoUpdate(pubkey, "unknown", false, null);
+      }
+    }
+  } finally {
+    isBatchLoading = false;
+  }
 }
 
-/**
- * Queue authors for progressive loading (call with posts sorted by timestamp desc)
- */
-function queueAuthorsForLoading(authorPubkeys: string[]) {
-  // Clear existing queue
-  loadingQueue = [];
-
-  // Add unique authors to queue (maintain order - most recent first)
-  const seen = new Set<string>();
-  for (const pubkey of authorPubkeys) {
-    if (!seen.has(pubkey)) {
-      seen.add(pubkey);
-      loadingQueue.push(pubkey);
-    }
+// Helper to check premium status from cache (used by premium feed filter)
+async function checkPremiumStatus(authorPubkey: string): Promise<{ isPremium: boolean; profilePicture: string | null }> {
+  if (authorInfoCache.has(authorPubkey)) {
+    const info = authorInfoCache.get(authorPubkey)!;
+    return { isPremium: info.isPremium, profilePicture: info.profilePicture };
   }
 
-  // Start processing
-  processLoadingQueue();
+  try {
+    const response = await api.isPremiumWallet(authorPubkey);
+    return {
+      isPremium: response.is_premium || false,
+      profilePicture: response.profile_picture || null
+    };
+  } catch {
+    return { isPremium: false, profilePicture: null };
+  }
 }
 
 interface Post {
@@ -160,6 +129,15 @@ interface Post {
   like_count: number;
   comment_count: number;
   has_liked: boolean;
+  image: string | null;
+}
+
+// Preview comment to show under a post in the feed
+interface PreviewComment {
+  id: number;
+  content: string;
+  username: string;
+  profile_picture: string | null;
   image: string | null;
 }
 
@@ -223,14 +201,15 @@ function ShadowPostCard({
   const timeAgo = getTimeAgo(post.timestamp);
 
   // Initialize from cache if available
+  const cachedInfo = authorInfoCache.get(post.author);
   const [authorName, setAuthorName] = useState<string | null>(
-    shadowNameCache.get(post.author) || null
+    cachedInfo?.name || null
   );
   const [isPremium, setIsPremium] = useState(
-    premiumCache.get(post.author)?.isPremium || false
+    cachedInfo?.isPremium || false
   );
   const [premiumPfp, setPremiumPfp] = useState<string | null>(
-    premiumCache.get(post.author)?.profilePicture || null
+    cachedInfo?.profilePicture || null
   );
 
   // Subscribe to author info updates from progressive loader
@@ -380,7 +359,7 @@ function ShadowPostCard({
 
 export function MainFeed() {
   const { isShadowMode } = useMode();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { showToast } = useToast();
   const { registerRefreshCallback } = usePostModal();
   const { isUnlocked: isShadowUnlocked, wallets: shadowWallets } = useShadow();
@@ -393,6 +372,19 @@ export function MainFeed() {
   const [selectedNdd, setSelectedNdd] = useState<PremiumNdd | null>(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
+  // Preview comments state (postId -> comment)
+  const [previewComments, setPreviewComments] = useState<Map<number, PreviewComment>>(new Map());
+
+  // Suggested users for "Who to follow" on mobile
+  const [suggestedUsers, setSuggestedUsers] = useState<api.SearchUser[]>([]);
+
+  // Pagination state (public feed only)
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef(1); // To avoid stale closures
+
   // Pull-to-refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -402,8 +394,15 @@ export function MainFeed() {
 
   const PULL_THRESHOLD = 80;
 
-  const fetchPosts = useCallback(async () => {
-    setIsLoading(true);
+  const fetchPosts = useCallback(async (loadMore = false) => {
+    if (loadMore) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+      setPage(1);
+      pageRef.current = 1;
+      setHasMore(true);
+    }
     setError(null);
     try {
       if (isShadowMode) {
@@ -420,7 +419,7 @@ export function MainFeed() {
 
           // Quick filter using cache (show what we know immediately)
           const knownPremiumPosts = onChainPosts.filter(p =>
-            premiumCache.get(p.author)?.isPremium
+            authorInfoCache.get(p.author)?.isPremium
           );
           setShadowPosts(knownPremiumPosts);
 
@@ -436,22 +435,33 @@ export function MainFeed() {
           }
         }
       } else {
-        // Public mode: fetch from API
+        // Public mode: fetch from API with pagination
         try {
+          const currentPage = loadMore ? pageRef.current + 1 : 1;
           const response = await api.getPosts({
             feed: activeTab === "following" ? "following" : "all",
-            limit: 20,
+            limit: 40,
+            page: currentPage,
           });
           if (response.success) {
-            setPosts(response.posts || []);
+            if (loadMore) {
+              setPosts(prev => [...prev, ...(response.posts || [])]);
+            } else {
+              setPosts(response.posts || []);
+            }
+            setHasMore(response.hasMore ?? false);
+            setPage(currentPage);
+            pageRef.current = currentPage;
           } else {
             // API returned success: false - show empty state instead of error
-            setPosts([]);
+            if (!loadMore) setPosts([]);
+            setHasMore(false);
           }
         } catch (apiErr) {
           // API call failed (network error, DB down, etc.) - show empty state
           console.error("API error:", apiErr);
-          setPosts([]);
+          if (!loadMore) setPosts([]);
+          setHasMore(false);
         }
       }
     } catch (err) {
@@ -459,18 +469,89 @@ export function MainFeed() {
       console.error("Error fetching posts:", err);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, [activeTab, isShadowMode]);
 
   // Fetch posts when component mounts or tab changes
   useEffect(() => {
-    fetchPosts();
+    fetchPosts(false);
   }, [fetchPosts, isAuthenticated]);
+
+  // Ref to track which post sets we've already fetched preview comments for
+  const fetchedPreviewsRef = useRef<string>("");
+
+  // Fetch preview comments for ~25% of posts with comments (public feed only)
+  useEffect(() => {
+    if (isShadowMode || posts.length === 0) return;
+
+    // Create a key based on post IDs to avoid refetching for the same posts
+    const postKey = posts.map(p => p.id).join(",");
+    if (fetchedPreviewsRef.current === postKey) return;
+    fetchedPreviewsRef.current = postKey;
+
+    const fetchPreviewComments = async () => {
+      // Get posts with at least 1 comment
+      const postsWithComments = posts.filter(p => p.comment_count >= 1);
+      if (postsWithComments.length === 0) {
+        setPreviewComments(new Map());
+        return;
+      }
+
+      // Randomly select ~25% of posts (at least 1 if any have comments)
+      const numToShow = Math.max(1, Math.floor(postsWithComments.length * 0.25));
+      const shuffled = [...postsWithComments].sort(() => Math.random() - 0.5);
+      const selectedPosts = shuffled.slice(0, numToShow);
+
+      // Fetch first comment for each selected post
+      const newPreviewComments = new Map<number, PreviewComment>();
+
+      for (const post of selectedPosts) {
+        try {
+          const response = await api.getComments(post.id);
+          if (response.success && response.comments && response.comments.length > 0) {
+            // Get the first root-level comment (no parent)
+            const firstComment = response.comments.find(c => !c.parent_comment_id) || response.comments[0];
+            newPreviewComments.set(post.id, {
+              id: firstComment.id,
+              content: firstComment.content,
+              username: firstComment.username,
+              profile_picture: firstComment.profile_picture,
+              image: firstComment.image,
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fetch comments for post ${post.id}:`, err);
+        }
+      }
+
+      setPreviewComments(newPreviewComments);
+    };
+
+    fetchPreviewComments();
+  }, [posts, isShadowMode]);
 
   // Register refresh callback for when a new post is created
   useEffect(() => {
-    registerRefreshCallback(fetchPosts);
+    registerRefreshCallback(() => fetchPosts(false));
   }, [registerRefreshCallback, fetchPosts]);
+
+  // Infinite scroll observer (public feed only)
+  useEffect(() => {
+    if (isShadowMode || !loadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isLoading) {
+          fetchPosts(true);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [isShadowMode, hasMore, isLoadingMore, isLoading, fetchPosts]);
 
   // Pull-to-refresh handler
   const handleRefresh = useCallback(async () => {
@@ -478,7 +559,7 @@ export function MainFeed() {
     if (isShadowMode) {
       invalidatePostsCache();
     }
-    await fetchPosts();
+    await fetchPosts(false);
     setIsRefreshing(false);
   }, [isShadowMode, fetchPosts]);
 
@@ -534,6 +615,15 @@ export function MainFeed() {
     if (isShadowMode) {
       api.getPremiumNddList(100).then(res => {
         setNddList(res.ndds || []);
+      }).catch(() => {});
+    }
+  }, [isShadowMode]);
+
+  // Fetch suggested users for "Who to follow" on mobile (public mode only)
+  useEffect(() => {
+    if (!isShadowMode) {
+      api.getSuggestedUsers().then(res => {
+        setSuggestedUsers(res.users || []);
       }).catch(() => {});
     }
   }, [isShadowMode]);
@@ -653,7 +743,7 @@ export function MainFeed() {
           <div className="text-center py-12 text-muted-foreground">
             <p>{error}</p>
             <button
-              onClick={fetchPosts}
+              onClick={() => fetchPosts()}
               className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm"
             >
               Try again
@@ -724,84 +814,187 @@ export function MainFeed() {
             )}
           </div>
         ) : (
-          posts.map((post) => (
-            <div
-              key={post.id}
-              className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
-              onClick={() => window.location.href = `/post/${post.id}`}
-            >
-              <div className="flex gap-3">
-                <a
-                  href={`/user/${post.username}`}
-                  onClick={(e) => e.stopPropagation()}
+          <>
+            {posts.map((post, index) => (
+              <div key={post.id}>
+                <div
+                  className="p-4 border-b border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
+                  onClick={() => window.location.href = `/post/${post.id}`}
                 >
-                  <img
-                    src={getAvatarUrl(post)}
-                    alt={post.username}
-                    className="w-10 h-10 rounded-full flex-shrink-0 ring-2 ring-primary/20 object-cover"
-                  />
-                </a>
+                <div className="flex gap-3">
+                  <a
+                    href={`/user/${post.username}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <img
+                      src={getAvatarUrl(post)}
+                      alt={post.username}
+                      className="w-10 h-10 rounded-full flex-shrink-0 ring-2 ring-primary/20 object-cover"
+                    />
+                  </a>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/user/${post.username}`}
-                      className="font-medium text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      @{post.username || "anon"}
-                    </a>
-                    <span className="text-muted-foreground text-sm">
-                      {getTruncatedWallet(post.wallet_address)}
-                    </span>
-                    <span className="text-muted-foreground text-sm">
-                      {post.time_ago}
-                    </span>
-                  </div>
-
-                  <p className="mt-1 text-foreground font-sans">
-                    {renderContentWithMentions(post.content)}
-                  </p>
-
-                  {/* Post image */}
-                  {post.image && (
-                    <div className="mt-2 rounded-xl overflow-hidden border border-border">
-                      <img src={getImageUrl(post.image, "")} alt="" className="w-full max-h-96 object-cover" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/user/${post.username}`}
+                        className="font-medium text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        @{post.username || "anon"}
+                      </a>
+                      <span className="text-muted-foreground text-sm">
+                        {getTruncatedWallet(post.wallet_address)}
+                      </span>
+                      <span className="text-muted-foreground text-sm">
+                        {post.time_ago}
+                      </span>
                     </div>
-                  )}
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-6 mt-3">
-                    <button
-                      onClick={(e) => handleLike(post.id, e)}
-                      className={`flex items-center gap-1.5 transition-colors ${
-                        post.has_liked
-                          ? "text-red-500"
-                          : "text-muted-foreground hover:text-red-500"
-                      }`}
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${post.has_liked ? "fill-current" : ""}`}
-                      />
-                      <span className="text-sm">{post.like_count}</span>
-                    </button>
+                    <p className="mt-1 text-foreground font-sans">
+                      {renderContentWithMentions(post.content)}
+                    </p>
 
-                    <button className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
-                      <MessageCircle className="w-4 h-4" />
-                      <span className="text-sm">{post.comment_count}</span>
-                    </button>
+                    {/* Post image */}
+                    {post.image && (
+                      <div className="mt-2 rounded-xl overflow-hidden border border-border">
+                        <img src={getImageUrl(post.image, "")} alt="" className="w-full max-h-96 object-cover" />
+                      </div>
+                    )}
 
-                    <button
-                      onClick={(e) => handleShare(post.id, e)}
-                      className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <Share className="w-4 h-4" />
-                    </button>
+                    {/* Actions */}
+                    <div className="flex items-center gap-6 mt-3">
+                      <button
+                        onClick={(e) => handleLike(post.id, e)}
+                        className={`flex items-center gap-1.5 transition-colors ${
+                          post.has_liked
+                            ? "text-red-500"
+                            : "text-muted-foreground hover:text-red-500"
+                        }`}
+                      >
+                        <Heart
+                          className={`w-4 h-4 ${post.has_liked ? "fill-current" : ""}`}
+                        />
+                        <span className="text-sm">{post.like_count}</span>
+                      </button>
+
+                      <button className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                        <MessageCircle className="w-4 h-4" />
+                        <span className="text-sm">{post.comment_count}</span>
+                      </button>
+
+                      <button
+                        onClick={(e) => handleShare(post.id, e)}
+                        className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Share className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Preview comment (shown for ~25% of posts with comments) */}
+                    {previewComments.has(post.id) && (() => {
+                      const comment = previewComments.get(post.id)!;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <div className="flex gap-2">
+                            <img
+                              src={getImageUrl(comment.profile_picture, `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.username}`)}
+                              alt={comment.username}
+                              className="w-6 h-6 rounded-full flex-shrink-0 object-cover"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-primary">
+                                  @{comment.username || "anon"}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {comment.content}
+                              </p>
+                              {comment.image && (
+                                <div className="mt-1 rounded-lg overflow-hidden border border-border max-w-[200px]">
+                                  <img src={getImageUrl(comment.image, "")} alt="" className="w-full max-h-24 object-cover" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
+
+                {/* Who to follow - mobile only, after every 20th post */}
+                {suggestedUsers.length > 0 && (index + 1) % 20 === 0 && index < posts.length - 1 && (() => {
+                  // Filter out current user from suggestions
+                  const filteredUsers = suggestedUsers.filter(u => u.id !== user?.id);
+                  if (filteredUsers.length === 0) return null;
+
+                  const startIdx = (Math.floor(index / 20) * 2) % filteredUsers.length;
+                  const usersToShow = filteredUsers.slice(startIdx, startIdx + 2);
+                  // If we don't have 2 users, wrap around
+                  if (usersToShow.length < 2 && filteredUsers.length >= 2) {
+                    usersToShow.push(...filteredUsers.slice(0, 2 - usersToShow.length));
+                  }
+
+                  return (
+                  <div className="xl:hidden border-b border-border px-4 py-3 bg-card/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Users className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">Who to follow</span>
+                    </div>
+                    <div className="space-y-3">
+                      {usersToShow.map((suggestedUser) => (
+                        <a
+                          key={suggestedUser.id}
+                          href={`/user/${suggestedUser.username}`}
+                          className="flex items-center justify-between group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={suggestedUser.profile_picture ? getImageUrl(suggestedUser.profile_picture, "") : `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestedUser.username}`}
+                              alt={suggestedUser.username}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                            <div>
+                              <p className="font-medium text-foreground text-sm group-hover:underline">
+                                @{suggestedUser.username}
+                              </p>
+                              {suggestedUser.bio && (
+                                <p className="text-xs text-muted-foreground line-clamp-1 max-w-[180px]">
+                                  {suggestedUser.bio}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              window.location.href = `/user/${suggestedUser.username}`;
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
+                          >
+                            View
+                          </button>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  );
+                })()}
+              </div>
+            ))}
+            {/* Infinite scroll trigger */}
+            <div ref={loadMoreRef} className="py-4 flex justify-center">
+              {isLoadingMore && (
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              )}
+              {!hasMore && posts.length > 0 && (
+                <p className="text-muted-foreground text-sm">No more posts</p>
+              )}
             </div>
-          ))
+          </>
         )}
       </div>
 

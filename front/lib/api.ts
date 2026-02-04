@@ -205,7 +205,7 @@ export async function getPosts(options?: {
   if (options?.feed) params.append('feed', options.feed);
 
   const queryString = params.toString() ? `&${params.toString()}` : '';
-  return apiCall<{ success: boolean; posts: Post[] }>(`get-posts${queryString}`);
+  return apiCall<{ success: boolean; posts: Post[]; hasMore?: boolean; page?: number }>(`get-posts${queryString}`);
 }
 
 export async function createPost(content: string, options?: {
@@ -278,9 +278,13 @@ export async function toggleLike(postId: number) {
 export interface Comment {
   id: number;
   content: string;
+  image: string | null;
   user_id: number;
   username: string;
   profile_picture: string | null;
+  wallet_address: string | null;
+  parent_comment_id: number | null;
+  reply_count: number;
   time_ago: string;
   like_count: number;
   has_liked: boolean;
@@ -290,11 +294,44 @@ export async function getComments(postId: number) {
   return apiCall<{ success: boolean; comments: Comment[]; count: number }>(`get-comments&post_id=${postId}`);
 }
 
-export async function addComment(postId: number, content: string) {
+export async function addComment(postId: number, content: string, parentCommentId?: number, image?: File) {
+  if (image) {
+    // Use FormData for image upload
+    const formData = new FormData();
+    formData.append('post_id', postId.toString());
+    formData.append('content', content);
+    formData.append('image', image);
+    if (parentCommentId) formData.append('parent_comment_id', parentCommentId.toString());
+
+    const url = `${API_BASE}/?action=add-comment`;
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Server error: ${text.substring(0, 200)}`);
+    }
+    if (!data.success && data.error) throw new Error(data.error);
+    return data as { success: boolean; comment: Comment; comment_count: number };
+  }
+
   return apiCall<{ success: boolean; comment: Comment; comment_count: number }>('add-comment', {
     method: 'POST',
-    body: JSON.stringify({ post_id: postId, content }),
+    body: JSON.stringify({
+      post_id: postId,
+      content,
+      parent_comment_id: parentCommentId || null
+    }),
   });
+}
+
+export async function getCommentReplies(commentId: number) {
+  return apiCall<{ success: boolean; replies: Comment[] }>(`get-comment-replies&comment_id=${commentId}`);
 }
 
 export async function deleteComment(commentId: number, postId: number) {
@@ -406,6 +443,22 @@ export async function isPremiumWallet(walletAddress: string) {
 }
 
 /**
+ * Batch get info for multiple shadow wallets (name + premium status)
+ */
+export interface ShadowWalletBatchInfo {
+  name: string | null;
+  is_premium: boolean;
+  profile_picture: string | null;
+}
+
+export async function getShadowWalletsBatch(wallets: string[]) {
+  return apiCall<{ success: boolean; results: Record<string, ShadowWalletBatchInfo> }>('api-wallets-batch', {
+    method: 'POST',
+    body: JSON.stringify({ wallets }),
+  });
+}
+
+/**
  * Set premium status for a wallet address
  */
 export async function setPremiumWallet(walletAddress: string, isPremium: boolean) {
@@ -473,3 +526,5 @@ export async function verifyNddPurchase(data: {
     body: JSON.stringify(data),
   });
 }
+
+

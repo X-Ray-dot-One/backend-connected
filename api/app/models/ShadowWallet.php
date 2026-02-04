@@ -216,4 +216,61 @@ class ShadowWallet {
 
         return $stmt->execute();
     }
+
+    /**
+     * Get batch info (name + premium status) for multiple wallets
+     * Returns associative array: wallet_address => { name, is_premium, profile_picture }
+     */
+    public function getBatchInfo(array $wallets) {
+        if (empty($wallets)) {
+            return [];
+        }
+
+        $results = [];
+
+        // Initialize all wallets with default values
+        foreach ($wallets as $wallet) {
+            $results[$wallet] = [
+                'name' => null,
+                'is_premium' => false,
+                'profile_picture' => null
+            ];
+        }
+
+        // Build placeholders for IN clause
+        $placeholders = implode(',', array_fill(0, count($wallets), '?'));
+
+        // Get names from shadow_wallets
+        $stmt = $this->db->prepare("
+            SELECT shadow_pubkey, name
+            FROM shadow_wallets
+            WHERE shadow_pubkey IN ($placeholders)
+        ");
+        $stmt->execute($wallets);
+        $nameResults = $stmt->fetchAll();
+
+        foreach ($nameResults as $row) {
+            if (isset($results[$row['shadow_pubkey']])) {
+                $results[$row['shadow_pubkey']]['name'] = $row['name'];
+            }
+        }
+
+        // Get premium status from premium_wallets
+        $stmt = $this->db->prepare("
+            SELECT wallet_address, is_premium, profile_picture
+            FROM premium_wallets
+            WHERE wallet_address IN ($placeholders)
+        ");
+        $stmt->execute($wallets);
+        $premiumResults = $stmt->fetchAll();
+
+        foreach ($premiumResults as $row) {
+            if (isset($results[$row['wallet_address']])) {
+                $results[$row['wallet_address']]['is_premium'] = (bool)$row['is_premium'];
+                $results[$row['wallet_address']]['profile_picture'] = $row['profile_picture'];
+            }
+        }
+
+        return $results;
+    }
 }

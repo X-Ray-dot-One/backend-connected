@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Flame, Globe, Loader2, Crown } from "lucide-react";
 import { useMode } from "@/contexts/mode-context";
+import { useAuth } from "@/contexts/auth-context";
 import { useSearchModal } from "./app-layout";
 import { getTop20Posts, TopPost } from "@/lib/shadow/topPosts";
-import { getShadowWalletName, isPremiumWallet, getPremiumNddList, PremiumNdd } from "@/lib/api";
+import { getShadowWalletsBatch, getPremiumNddList, PremiumNdd, getSuggestedUsers, followUser, unfollowUser, SearchUser } from "@/lib/api";
 import { getImageUrl } from "@/lib/utils";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { EyeOff } from "lucide-react";
@@ -45,6 +46,7 @@ interface TopPostWithName extends TopPost {
 export function RightPanel() {
   const router = useRouter();
   const { isShadowMode } = useMode();
+  const { user } = useAuth();
   const { openSearchModal } = useSearchModal();
   const [topPosts, setTopPosts] = useState<TopPostWithName[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
@@ -52,6 +54,9 @@ export function RightPanel() {
   const [isLoadingNdd, setIsLoadingNdd] = useState(false);
   const [selectedNdd, setSelectedNdd] = useState<PremiumNdd | null>(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState<SearchUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [followedUsers, setFollowedUsers] = useState<Set<number>>(new Set());
 
   // Fetch top posts when in shadow mode
   useEffect(() => {
@@ -60,36 +65,33 @@ export function RightPanel() {
       getTop20Posts()
         .then(async (posts) => {
           const topFive = posts.slice(0, 5);
-          // Fetch names and premium status for all authors in parallel
-          const postsWithNames = await Promise.all(
-            topFive.map(async (post) => {
-              let authorName: string | undefined;
-              let isPremium = false;
 
-              try {
-                const nameResult = await getShadowWalletName(post.author);
-                authorName = nameResult.name || undefined;
-              } catch (e) {
-                console.error("Failed to get shadow name:", e);
+          // Get unique authors and fetch all info in single batch call
+          const uniqueAuthors = [...new Set(topFive.map(p => p.author))];
+
+          let batchResults: Record<string, { name: string | null; is_premium: boolean; profile_picture: string | null }> = {};
+          if (uniqueAuthors.length > 0) {
+            try {
+              const batchResponse = await getShadowWalletsBatch(uniqueAuthors);
+              if (batchResponse.success) {
+                batchResults = batchResponse.results;
               }
+            } catch (e) {
+              console.error("Failed to batch fetch author info:", e);
+            }
+          }
 
-              let premiumPfp: string | null = null;
-              try {
-                const premiumResult = await isPremiumWallet(post.author);
-                isPremium = premiumResult.is_premium || false;
-                premiumPfp = premiumResult.profile_picture || null;
-              } catch (e) {
-                console.error("Failed to get premium status:", e);
-              }
+          // Map posts with their author info from batch results
+          const postsWithNames = topFive.map(post => {
+            const info = batchResults[post.author];
+            return {
+              ...post,
+              authorName: info?.name || undefined,
+              isPremium: info?.is_premium || false,
+              premiumPfp: info?.profile_picture || null,
+            };
+          });
 
-              return {
-                ...post,
-                authorName,
-                isPremium,
-                premiumPfp,
-              };
-            })
-          );
           setTopPosts(postsWithNames);
         })
         .catch((error) => {
@@ -116,6 +118,41 @@ export function RightPanel() {
         });
     }
   }, [isShadowMode]);
+
+  // Fetch suggested users when in public mode
+  useEffect(() => {
+    if (!isShadowMode) {
+      setIsLoadingUsers(true);
+      getSuggestedUsers()
+        .then((res) => {
+          setSuggestedUsers(res.users || []);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch suggested users:", error);
+        })
+        .finally(() => {
+          setIsLoadingUsers(false);
+        });
+    }
+  }, [isShadowMode]);
+
+  const handleFollow = async (userId: number) => {
+    try {
+      if (followedUsers.has(userId)) {
+        await unfollowUser(userId);
+        setFollowedUsers(prev => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+      } else {
+        await followUser(userId);
+        setFollowedUsers(prev => new Set(prev).add(userId));
+      }
+    } catch (error) {
+      console.error("Failed to follow/unfollow:", error);
+    }
+  };
 
   return (
     <aside className="fixed right-0 top-0 w-96 h-screen p-4 flex flex-col gap-4 overflow-y-auto bg-background border-l border-border">
@@ -250,10 +287,45 @@ export function RightPanel() {
                 </div>
               ))
             )
-          ) : (
-            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-              coming soon
+          ) : isLoadingUsers ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
+          ) : suggestedUsers.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              No suggestions available
+            </div>
+          ) : (
+            suggestedUsers.filter(u => u.id !== user?.id).slice(0, 3).map((suggestedUser) => (
+              <div
+                key={suggestedUser.id}
+                className="flex items-center justify-between px-4 py-3 hover:bg-muted transition-colors"
+              >
+                <a href={`/user/${suggestedUser.username}`} className="flex items-center gap-3 min-w-0 flex-1">
+                  <img
+                    src={suggestedUser.profile_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${suggestedUser.username}`}
+                    alt={suggestedUser.username}
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground truncate">@{suggestedUser.username}</p>
+                    {suggestedUser.bio && (
+                      <p className="text-xs text-muted-foreground truncate">{suggestedUser.bio}</p>
+                    )}
+                  </div>
+                </a>
+                <button
+                  onClick={() => handleFollow(suggestedUser.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors flex-shrink-0 ml-2 ${
+                    followedUsers.has(suggestedUser.id)
+                      ? "bg-muted text-foreground hover:bg-red-500/20 hover:text-red-500"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  }`}
+                >
+                  {followedUsers.has(suggestedUser.id) ? "Following" : "Follow"}
+                </button>
+              </div>
+            ))
           )}
         </div>
         <a

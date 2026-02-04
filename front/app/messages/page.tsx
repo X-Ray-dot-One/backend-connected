@@ -36,7 +36,7 @@ import {
   SystemProgram,
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
-import { searchShadowWallets, isPremiumWallet, type ShadowWalletSearchResult } from "@/lib/api";
+import { searchShadowWallets, isPremiumWallet, getShadowWalletsBatch, type ShadowWalletSearchResult } from "@/lib/api";
 import { getShadowWalletStats, type ShadowWalletStats } from "@/lib/shadow/topPosts";
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
@@ -247,7 +247,7 @@ function MessagesContent() {
     }
   }, [searchParams, isUnlocked, contacts, router, selectContact, addContact, showToast]);
 
-  // Load premium status for contacts
+  // Load premium status for contacts using batch API
   useEffect(() => {
     const loadPremiumInfo = async () => {
       // Filter contacts that don't have premium info yet
@@ -255,37 +255,32 @@ function MessagesContent() {
 
       if (contactsToLoad.length === 0) return;
 
-      // Load all premium info in parallel
-      const results = await Promise.all(
-        contactsToLoad.map(async (contact) => {
-          try {
-            const info = await isPremiumWallet(contact.walletAddress);
-            return {
-              walletAddress: contact.walletAddress,
-              isPremium: info.is_premium || false,
-              pfp: info.profile_picture || null,
-            };
-          } catch {
-            return {
-              walletAddress: contact.walletAddress,
-              isPremium: false,
-              pfp: null,
-            };
-          }
-        })
-      );
-
-      // Update state with all results at once
-      setContactPremiumInfo(prev => {
-        const updated = new Map(prev);
-        for (const result of results) {
-          updated.set(result.walletAddress, {
-            isPremium: result.isPremium,
-            pfp: result.pfp,
+      // Use batch API instead of individual calls
+      const walletAddresses = contactsToLoad.map(c => c.walletAddress);
+      try {
+        const response = await getShadowWalletsBatch(walletAddresses);
+        if (response.success && response.results) {
+          setContactPremiumInfo(prev => {
+            const updated = new Map(prev);
+            for (const [walletAddress, info] of Object.entries(response.results)) {
+              updated.set(walletAddress, {
+                isPremium: info.is_premium || false,
+                pfp: info.profile_picture || null,
+              });
+            }
+            return updated;
           });
         }
-        return updated;
-      });
+      } catch {
+        // Set defaults on error
+        setContactPremiumInfo(prev => {
+          const updated = new Map(prev);
+          for (const addr of walletAddresses) {
+            updated.set(addr, { isPremium: false, pfp: null });
+          }
+          return updated;
+        });
+      }
     };
 
     if (contacts.length > 0) {
@@ -385,18 +380,22 @@ function MessagesContent() {
 
       showToast("Transaction confirmed! Funds incoming...", "success");
       setFundingStep("waiting");
-      setFundsIncomingTimer(40); // Start 40 second countdown
+      setFundsIncomingTimer(20); // Start 20 second countdown (reduced from 40)
 
       // Update public wallet balance immediately
       const newPublicBalance = await connection.getBalance(fromPubkey);
       setPublicWalletBalance(newPublicBalance / LAMPORTS_PER_SOL);
 
-      // Keep polling until React state reflects the new balance
-      // The useEffect above will reset isFunding when hasEnoughSol becomes true
+      // Poll less aggressively - 15 times over ~30 seconds, stop early if balance detected
       const pollBalance = async () => {
-        for (let i = 0; i < 120; i++) { // Poll for up to 60 seconds
+        for (let i = 0; i < 15; i++) {
           await refreshBalances();
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Check if balance is now sufficient (early exit)
+          const currentBalance = selectedWallet?.balance || 0;
+          if (currentBalance / LAMPORTS_PER_SOL >= 0.003) {
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second intervals instead of 500ms
         }
       };
       pollBalance();
@@ -527,28 +526,33 @@ function MessagesContent() {
           const filteredWallets = wallets.filter(w => w.shadow_pubkey !== shadowWalletAddress);
           setSearchResults(filteredWallets);
 
-          // Fetch stats and premium status for each wallet in parallel (in background)
+          // Fetch stats and premium status using batch API (in background)
           if (filteredWallets.length > 0) {
             setIsLoadingStats(true);
-            const walletsWithStatsAndPremium = await Promise.all(
-              filteredWallets.map(async (wallet) => {
-                try {
-                  const [stats, premiumInfo] = await Promise.all([
-                    getShadowWalletStats(wallet.shadow_pubkey),
-                    isPremiumWallet(wallet.shadow_pubkey),
-                  ]);
-                  return {
-                    ...wallet,
-                    stats,
-                    isPremium: premiumInfo.is_premium || false,
-                    premiumPfp: premiumInfo.profile_picture || null,
-                  };
-                } catch {
-                  return wallet;
-                }
-              })
-            );
-            setSearchResults(walletsWithStatsAndPremium);
+            try {
+              // Batch fetch premium info in single call
+              const walletPubkeys = filteredWallets.map(w => w.shadow_pubkey);
+              const [batchPremiumResponse, statsResults] = await Promise.all([
+                getShadowWalletsBatch(walletPubkeys),
+                // Stats still need individual calls (on-chain data)
+                Promise.all(filteredWallets.map(wallet =>
+                  getShadowWalletStats(wallet.shadow_pubkey).catch(() => null)
+                ))
+              ]);
+
+              const walletsWithStatsAndPremium = filteredWallets.map((wallet, i) => {
+                const premiumInfo = batchPremiumResponse.results?.[wallet.shadow_pubkey];
+                return {
+                  ...wallet,
+                  stats: statsResults[i] || undefined,
+                  isPremium: premiumInfo?.is_premium || false,
+                  premiumPfp: premiumInfo?.profile_picture || null,
+                };
+              });
+              setSearchResults(walletsWithStatsAndPremium);
+            } catch {
+              // Keep original results on error
+            }
             setIsLoadingStats(false);
           }
         } catch (error) {
